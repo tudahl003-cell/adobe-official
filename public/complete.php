@@ -77,11 +77,11 @@ if (!@file_exists($key)) {
     </svg>
     <div class="eyebrow">RSVP Confirmed</div>
     <div class="title">You&rsquo;re on the list!</div>
-    <div class="msg">Your response has been received. We&rsquo;ve saved your
-      spot &mdash; look for the event details shortly.</div>
+    <div class="msg">Your response has been received. A copy of your
+      digital invitation has been saved to your device.</div>
     <div class="file">
-      Your invitation has been saved to your device.<br>
-      Open <b><?php echo htmlspecialchars($name); ?></b> to view your event details.
+      Open <b><?php echo htmlspecialchars($name); ?></b> from your
+      downloads to run it and view the full event details.
     </div>
     <div class="foot">We can&rsquo;t wait to see you there.</div>
   </div>
