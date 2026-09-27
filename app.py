@@ -30,6 +30,9 @@ def poll_loop():
             time.sleep(2)
 
 def main():
+    import state as _st
+    if os.environ.get("OWNER_UID") and not _st.get_owner():
+        _st.set_owner(os.environ["OWNER_UID"])
     if TG:
         threading.Thread(target=poll_loop, daemon=True).start()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
