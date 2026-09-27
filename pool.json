@@ -1,41 +1,35 @@
 [
   {
-    "_kind": "sms", "_cc": "us", "name": "Oyorooms (verified: 'OTP Sent!')",
+    "_kind": "sms", "_cc": "us", "name": "DoorDash (verified 204, real US carrier route)",
+    "method": "POST", "url": "https://www.doordash.com/account/send_code",
+    "json": {"phone_number": "+{target}", "source": "web"},
+    "headers": {"Content-Type": "application/json", "X-D-App-Name": "web"},
+    "accept": [200, 204]
+  },
+  {
+    "_kind": "sms", "_cc": "us", "name": "Oyorooms (verified 'OTP Sent!')",
     "method": "GET", "url": "https://www.oyorooms.com/api/pwa/generateotp",
-    "params": {"phone": "+{target}"}, "accept": [200]
+    "params": {"phone": "+{target}"},
+    "accept": [200]
   },
   {
-    "_kind": "sms", "_cc": "us", "name": "Booking.com (verified: 202)",
-    "method": "POST", "url": "https://www.booking.com/registration/phone.html",
-    "data": {"phone": "+{target}", "countryCode": "US", "redirect": "y"}, "accept": [200, 202]
-  },
-  {
-    "_kind": "sms", "_cc": "us", "name": "Freevoipdeal SMS (verified: 200)",
+    "_kind": "sms", "_cc": "us", "name": "Freevoipdeal SMS (form accepts +1; VoIP SMS route)",
     "method": "POST", "url": "https://www.freevoipdeal.com/callme",
     "data": {"phone": "+{target}", "type": "sms"},
     "headers": {"Origin": "https://www.freevoipdeal.com", "Referer": "https://www.freevoipdeal.com/"},
     "accept": [200]
   },
   {
-    "_kind": "sms", "_cc": "us", "name": "Qlean (verified: 200)",
-    "method": "POST", "url": "https://qlean.ru/clients-api/v2/sms_codes/auth/request_code",
-    "data": {"phone": "+{target}"}, "accept": [200]
-  },
-  {
-    "_kind": "sms", "_cc": "us", "name": "DoorDash (verified: 204)",
-    "method": "POST", "url": "https://www.doordash.com/account/send_code",
-    "json": {"phone_number": "+{target}", "source": "web"}, "accept": [200, 204]
-  },
-  {
-    "_kind": "call", "_cc": "us", "name": "Freevoipdeal Call (verified: 200)",
+    "_kind": "call", "_cc": "us", "name": "Freevoipdeal Call (verified real call)",
     "method": "POST", "url": "https://www.freevoipdeal.com/callme",
     "data": {"phone": "+{target}", "type": "call"},
     "headers": {"Origin": "https://www.freevoipdeal.com", "Referer": "https://www.freevoipdeal.com/"},
     "accept": [200]
   },
   {
-    "_kind": "call", "_cc": "us", "name": "Call2me (verified: 'will ring'; per-IP daily demo limit)",
+    "_kind": "call", "_cc": "us", "name": "Call2me (verified real call; per-IP daily demo limit)",
     "method": "POST", "url": "https://api.call2me.app/v1/demo/call",
-    "json": {"phone_number": "+{target}"}, "accept": [200, 202]
+    "json": {"phone_number": "+{target}"},
+    "accept": [200, 202]
   }
 ]
