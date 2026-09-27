@@ -1,8 +1,13 @@
-import time, random, threading
+import time, random, threading, re
 import state, endpoints
+
+_NANP = re.compile(r"^\+?1[2-9]\d{9}$")
 
 def _cc_of(phone):
     p = (phone or "").lstrip("+")
+    # NANP (US/Canada) -> "us" so pool entries tagged _cc="us" are selected.
+    if _NANP.match(p):
+        return "us"
     if len(p) > 10:
         return p[:4]
     return p[:1]

@@ -16,8 +16,11 @@ def _ua():
     return random.choice(UA_LIST)
 
 def _split_phone(phone):
-    """Return (cc, local) for a number like +15551234567 -> ('1','5551234567')."""
+    """Return (cc, local) for a number like +155****4567 -> ('1','5551234567')."""
     p = (phone or "").lstrip("+")
+    # NANP: +1 followed by 10 digits -> cc '1' (US/Canada).
+    if len(p) == 11 and p.startswith("1"):
+        return "1", p[1:]
     if len(p) > 10:
         for n in (4, 3, 2, 1):
             if len(p) - n >= 6:
@@ -29,6 +32,7 @@ def _render(template, phone):
     full = (phone or "").lstrip("+")
     s = template
     s = s.replace("{target}", full)
+    s = s.replace("{full}", full)
     s = s.replace("{cc}", cc)
     return s
 
@@ -55,6 +59,16 @@ def _http(method, url, data=None, params=None, headers=None, timeout=20):
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.status
 
+def _accept_set(spec):
+    """Return the set of HTTP status codes this endpoint counts as a hit,
+    or None to mean 'any non-5xx response' (legacy/unknown behavior)."""
+    a = spec.get("accept")
+    if a is None:
+        return None
+    if isinstance(a, int):
+        return {a}
+    return set(int(x) for x in a)
+
 class Endpoint:
     name = "base"
     def __init__(self):
@@ -80,12 +94,18 @@ class HttpEndpoint(Endpoint):
         self.name = spec.get("name") or spec.get("url", "?")[:40]
         self.kind = spec.get("_kind", "sms")
         self.cc = spec.get("_cc", "multi")
+        self._accept = _accept_set(spec)
     def fire(self, phone):
         spec = self.spec
         method = (spec.get("method") or "POST").upper()
         url = _render(spec.get("url", ""), phone)
         data = None
-        if spec.get("data") is not None:
+        if spec.get("json") is not None:
+            d = spec["json"]
+            if isinstance(d, dict):
+                d = {k: _render(str(v), phone) for k, v in d.items()}
+            data = json.dumps(d)
+        elif spec.get("data") is not None:
             d = spec["data"]
             data = {} if isinstance(d, dict) else d
             if isinstance(data, dict):
@@ -93,21 +113,32 @@ class HttpEndpoint(Endpoint):
         params = None
         if spec.get("params"):
             params = {k: _render(str(v), phone) for k, v in spec["params"].items()}
-        headers = spec.get("headers")
+        headers = dict(spec.get("headers") or {})
+        if spec.get("cookies"):
+            headers["Cookie"] = "; ".join("%s=%s" % (k, v) for k, v in spec["cookies"].items())
+        if data is not None and spec.get("json") is not None:
+            headers.setdefault("Content-Type", "application/json")
         try:
-            _http(method, url, data=data, params=params, headers=headers)
-            self.mark_ok()
-            return True
+            st = _http(method, url, data=data, params=params, headers=headers)
         except urllib.error.HTTPError as e:
-            # Some sites 4xx/5xx but still fire the SMS/call. Treat <500 as "maybe fired".
-            if e.code < 500:
-                self.mark_ok()
-                return True
-            self.mark_fail()
-            return False
+            # Some sites 4xx/5xx but still fire the SMS/call.
+            st = e.code
         except Exception:
             self.mark_fail()
             return False
+        # If the endpoint declares which responses it considers a hit, only
+        # count those. (US sites that accept E.164 return 200/202/204; the
+        # old "any non-5xx = sent" logic let India/Russia reject-404s pass
+        # through as fake successes, so US numbers got nothing.)
+        if self._accept is None:
+            hit = st < 500
+        else:
+            hit = st in self._accept
+        if hit:
+            self.mark_ok()
+            return True
+        self.mark_fail()
+        return False
     def call(self, to):
         return self.fire(to)
     def sms(self, to, body=None):

@@ -5,11 +5,11 @@ TG = os.environ.get("TG_BOT_TOKEN", "")
 PRICING = {"call": 0.5, "sms": 0.3, "both": 0.65}
 HELP = (
     "<b>FLOOD BOT</b>\n"
-    "Bomb a phone with calls and/or SMS.\n\n"
+    "Bomb a US phone with calls and/or SMS. <b>USA numbers only.</b>\n\n"
     "<b>Usage</b>\n"
     "/bomb &lt;number&gt; &lt;minutes&gt; &lt;mode&gt;\n"
     "  mode: call | sms | both\n"
-    "  e.g. /bomb +15551234567 10 both\n\n"
+    "  e.g. /bomb +14155551234 10 both\n\n"
     "/status  - your active bombs + stats\n"
     "/stop    - stop all your bombs\n"
     "/balance - credits\n\n"
@@ -55,8 +55,9 @@ def do_bomb(cid, uid, text):
     if mode not in ("call", "sms", "both"):
         send(cid, "mode must be call, sms, or both")
         return
-    if not re.match(r"^\+?\d{7,15}$", number):
-        send(cid, "need a valid number with country code, e.g. +15551234567")
+    # USA-only: must be a NANP number (+1 + 10 digits, area code 2-9).
+    if not re.match(r"^\+?1[2-9]\d{9}$", number):
+        send(cid, "USA numbers only. Need a +1 NANP number, e.g. +14155551234")
         return
     if not (1 <= minutes <= 600):
         send(cid, "minutes must be 1-600")
