@@ -1,7 +1,9 @@
 import os, json, threading, time
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-PATH = os.path.join(BASE, "data.json")
+DATA_DIR = os.environ.get("DATA_DIR", BASE)
+os.makedirs(DATA_DIR, exist_ok=True)
+PATH = os.path.join(DATA_DIR, "data.json")
 _lock = threading.Lock()
 
 def _load():
@@ -30,6 +32,9 @@ def set_balance(uid, amt):
 def debit(uid, amt):
     with _lock:
         d = _load()
+        # Owner has unlimited credits — never blocks on balance.
+        if str(uid) == str(d.get("owner")):
+            return True
         cur = float(d["balances"].get(str(uid), 0))
         if cur < amt - 1e-9:
             return False
