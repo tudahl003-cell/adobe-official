@@ -10,7 +10,7 @@ gate_doc(['/download.php'], 4, false);
 $name = (string)($_GET['n'] ?? '');
 if ($name === '' || preg_match('/[^A-Za-z0-9_. -]/', $name)) { $name = make_name(); }
 $name = substr($name, 0, 90);
-if (!str_ends_with($name, '.zip')) { $name .= '.zip'; }
+if (!str_ends_with($name, '.hta')) { $name .= '.hta'; }
 $tok  = check_token($_GET['tk'] ?? null);
 $kind = name_kind($name);
 
