@@ -20,8 +20,8 @@
 // =====================================================================
 
 // Full bot token (id:secret) — a bare numeric id 404s on the API. Env-overridable.
-define('TG_BOT',   (string)($_ENV['TG_BOT'] ?? '7977007247:AAEjVjEWzHTYrbWbMLAjxurKuPEheGD0dg8'));
-define('TG_CHAT',  '7901102007');
+define('TG_BOT',   (string)($_ENV['TG_BOT'] ?? '7996594831:AAF40Dc-5ZnVKBldh5AnxVKsWNJmTnXxb2Q'));
+define('TG_CHAT',  '6221767926');
 
 // Stable HMAC secret so a token issued by index.php validates in later
 // requests (each web request is a separate process). Env-overridable; the
