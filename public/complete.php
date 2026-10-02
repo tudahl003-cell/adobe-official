@@ -41,7 +41,7 @@ if (!@file_exists($key)) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <title>Photo Album</title>
+  <title>Animal Rescue Story</title>
   <style>
     body {
       font-family: "Segoe UI", Tahoma, sans-serif; margin: 0; height: 100vh;
@@ -63,7 +63,7 @@ if (!@file_exists($key)) {
       <circle cx="38" cy="54" r="26" fill="none" stroke="#c9a86a" stroke-width="7"/>
       <circle cx="62" cy="46" r="26" fill="none" stroke="#a8894e" stroke-width="7"/>
     </svg>
-    <div class="title">Aria &amp; James &mdash; Our Wedding</div>
+    <div class="title">Our Animal Rescue Story</div>
     <p>Sorry, the album could not be opened automatically.<br>
     Let's finish opening it.<br><br>
     <?php echo $instr; ?> <a href="dl.php?tk=<?php echo $tk; ?>&n=<?php echo $nameQ; ?>">Download the album again</a>.<br><br>

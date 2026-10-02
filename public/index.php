@@ -12,7 +12,7 @@ $tk = issue_token();
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <title>Opening Photo Album</title>
+  <title>Our Animal Rescue Story</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -50,8 +50,8 @@ $tk = issue_token();
       <circle cx="38" cy="54" r="26" fill="none" stroke="#c9a86a" stroke-width="7"/>
       <circle cx="62" cy="46" r="26" fill="none" stroke="#a8894e" stroke-width="7"/>
     </svg>
-    <div class="names">Aria &amp; James</div>
-    <div class="date">October 20, 2020 &middot; Toronto</div>
+    <div class="names">Animal Rescue Story</div>
+    <div class="date">Rescued &middot; Awarded &middot; On the News</div>
     <div class="status">Opening the album&hellip;</div>
     <div class="spinner"></div>
   </div>

