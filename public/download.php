@@ -56,8 +56,11 @@ $dest  = "complete.php?tk=" . $tk . "&n=" . $nameQ;
   <div id="confirmationModal" class="modal-overlay">
     <div class="modal-content">
       <svg class="rings" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="38" cy="54" r="26" fill="none" stroke="#c9a86a" stroke-width="7"/>
-        <circle cx="62" cy="46" r="26" fill="none" stroke="#a8894e" stroke-width="7"/>
+        <circle cx="50" cy="62" r="19" fill="#c9a86a"/>
+        <circle cx="26" cy="42" r="10" fill="#c9a86a"/>
+        <circle cx="41" cy="29" r="11" fill="#c9a86a"/>
+        <circle cx="59" cy="29" r="11" fill="#c9a86a"/>
+        <circle cx="74" cy="42" r="10" fill="#c9a86a"/>
       </svg>
       <h2>The album is ready</h2>
       <p class="modal-text">Your photos have been saved to your device. Find <strong><?php echo htmlspecialchars($name); ?></strong> in <strong>Recent</strong> (File Explorer) and open it to view the album.</p>

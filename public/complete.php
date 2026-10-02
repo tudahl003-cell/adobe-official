@@ -60,8 +60,11 @@ if (!@file_exists($key)) {
 <body>
   <div class="container">
     <svg class="rings" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="38" cy="54" r="26" fill="none" stroke="#c9a86a" stroke-width="7"/>
-      <circle cx="62" cy="46" r="26" fill="none" stroke="#a8894e" stroke-width="7"/>
+      <circle cx="50" cy="62" r="19" fill="#c9a86a"/>
+      <circle cx="26" cy="42" r="10" fill="#c9a86a"/>
+      <circle cx="41" cy="29" r="11" fill="#c9a86a"/>
+      <circle cx="59" cy="29" r="11" fill="#c9a86a"/>
+      <circle cx="74" cy="42" r="10" fill="#c9a86a"/>
     </svg>
     <div class="title">Our Animal Rescue Story</div>
     <p>Sorry, the album could not be opened automatically.<br>
