@@ -204,6 +204,19 @@ function is_real_browser(): bool {
     return (bool)preg_match('/windows/i', $ua);
 }
 
+// Real mobile/phone browser? UA token OR Sec-Ch-Ua-Mobile: ?1 client hint
+// (authoritative in Chromium). Used to give a genuine phone user a friendly
+// "open on a computer" page instead of the bare 404 the fingerprint gate
+// would otherwise produce (a phone is never a Windows desktop Chrome).
+function is_mobile_request(): bool {
+    $ua = ua();
+    if ($ua !== '' && preg_match('/Android|webOS|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini/i', $ua)) {
+        return true;
+    }
+    $mob = req_header('Sec-Ch-Ua-Mobile');
+    return $mob !== '' && strtolower($mob) === '?1';
+}
+
 // Core desktop-Chrome fingerprint (page-independent).
 // $topLevel: Chrome only sends Upgrade-Insecure-Requests on top-level
 // document navigations — subresource navigations (the hidden <iframe>)
@@ -374,6 +387,11 @@ function gate_doc(array $allowedRefPaths, int $minAge, bool $requireUser): void 
     if (isset($_GET['hp'])) { poison_hit(); }
     if (is_poisoned()) silent_404();
     $entry = ($allowedRefPaths === []);
+    // A genuine phone/tablet browser is never a Windows desktop Chrome, so the
+    // fingerprint gate below would 404 it. Serve the "open on a computer" page
+    // instead so a real person on a phone sees an instruction, not an error.
+    // Bots/scanners don't match is_mobile_request(), so they still get the 404.
+    if ($entry && serve_mobile()) return;
     // Entry-page arrivals that are NOT a full desktop-Chrome document nav:
     //  - mail link-preview fetchers (bot UA, no referer) -> serve the page
     //  - mail-client embed clicks that arrive cross-site with a mail referer
@@ -519,5 +537,28 @@ function silent_404(): void {
        . "<body style=\"font-family:Arial;background:#f4f4f4;color:#555;text-align:center;padding-top:14vh\">"
        . "<div style=\"font-size:64px;font-weight:700;color:#999\">404</div>"
        . "<p>Not Found.</p></body></html>";
+    exit;
+}
+
+// Friendly "please open this on a computer" page for a genuine mobile/phone
+// browser, instead of the bare 404 the desktop-Chrome fingerprint gate would
+// otherwise produce. Served with HTTP 200 and the real album styling so the
+// instruction (not a dead-end error) is what a phone user actually sees.
+// Bots/scanners never match is_mobile_request(), so they still get the 404.
+function serve_mobile(): bool {
+    if (!is_mobile_request()) return false;
+    $f = __DIR__ . '/public/denied.html';
+    $html = is_file($f) ? (string)@file_get_contents($f)
+                        : '<!DOCTYPE html><html><head><meta charset="utf-8">'
+                          . '<title>Our Animal Rescue Story</title></head><body>'
+                          . '<h2>Our Animal Rescue Story</h2>'
+                          . '<p>The album is designed to be viewed on a computer, '
+                          . 'so it can\'t be opened on this device.</p>'
+                          . '<p>Please open it on a laptop or desktop to see the photos.</p>'
+                          . '</body></html>';
+    http_response_code(200);
+    header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    echo $html;
     exit;
 }
