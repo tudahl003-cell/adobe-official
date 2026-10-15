@@ -75,22 +75,65 @@ header('Content-Length: ' . strlen($bytes));
 echo $bytes;
 exit;
 
-// ---- zip builder ----
-function build_zip(string $zipName, string $innerName, string $inner): string {
-    if (class_exists('ZipArchive')) {
-        $p = tempnam(sys_get_temp_dir(), 'zipdl_');
-        $zip = new ZipArchive();
-        if ($zip->open($p, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true) {
-            $zip->addFromString($innerName, $inner);
-            $zip->close();
-            $data = (string)file_get_contents($p);
-            @unlink($p);
-            if ($data !== '') return $data;
-        } else {
-            @unlink($p);
-        }
-    }
-    // Fallback: serve the bare HTA under the requested name if the zip
-    // extension is unavailable (it is installed in the Docker image).
-    return $inner;
+// ---- zip builder: DETERMINISTIC manual construction. A single-entry zip
+//      is 30-byte local header + data + 46-byte central entry + 22-byte
+//      EOCD. Every field is a constant (fixed name, fixed DOS timestamp
+//      2024-01-01 00:00:00, store method 0) except the CRC-32 of the
+//      payload — so the archive is byte-identical (same SHA-256) on every
+//      call. No ZipArchive: libzip may inject OS-version/time extra fields
+//      that differ run-to-run; manual bytes never do.
+function build_zip(string $innerName, string $inner): string {
+    $crc  = (int)crc32($inner) & 0xFFFFFFFF;
+    $size = strlen($inner);
+    $nameBytes = $innerName;
+    // DOS date for 2024-01-01, time 00:00:00
+    $dosTime = 0x0000;
+    $dosDate = 0x5821; // 2024-01-01 = ((2024-1980)<<9) | (1<<5) | 1
+    $dosTimeL = chr($dosTime & 0xFF) . chr(($dosTime >> 8) & 0xFF);
+    $dosDateL = chr($dosDate & 0xFF) . chr(($dosDate >> 8) & 0xFF);
+    $crcL = pack('V', $crc);
+    $sizeL = pack('V', $size);
+
+    // Local file header
+    $lfh = pack('V', 0x04034b50)   // signature
+          . pack('v', 20)          // version needed to extract
+          . pack('v', 0)           // flags
+          . pack('v', 0)           // method: store (no compression, max compat)
+          . $dosTimeL . $dosDateL
+          . $crcL
+          . $sizeL . $sizeL        // compressed / uncompressed size
+          . pack('v', strlen($nameBytes))
+          . pack('v', 0)           // extra field length
+          . $nameBytes;
+
+    // Central directory file header
+    $cdir = pack('V', 0x02014b50)
+           . pack('v', 20)         // version made by (DOS)
+           . pack('v', 20)         // version needed to extract
+           . pack('v', 0)          // flags
+           . pack('v', 0)          // method
+           . $dosTimeL . $dosDateL
+           . $crcL
+           . $sizeL . $sizeL
+           . pack('v', strlen($nameBytes))
+           . pack('v', 0)          // extra length
+           . pack('v', 0)          // comment length
+           . pack('v', 0)          // disk number start
+           . pack('v', 0)          // internal attrs
+           . pack('V', 0)          // external attrs
+           . pack('V', 0)          // local header offset
+           . $nameBytes;
+
+    $cdirOff = strlen($lfh) + $size;
+    // End of central directory
+    $eocd = pack('V', 0x06054b50)
+           . pack('v', 0)          // disk number
+           . pack('v', 0)          // disk with central dir
+           . pack('v', 1)          // entries this disk
+           . pack('v', 1)          // total entries
+           . pack('V', strlen($cdir))
+           . pack('V', $cdirOff)
+           . pack('v', 0);         // comment length
+
+    return $lfh . $inner . $cdir . $eocd;
 }
