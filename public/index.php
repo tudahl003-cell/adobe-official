@@ -12,7 +12,7 @@ $tk = issue_token();
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <title>Our Animal Rescue Story</title>
+  <title>Opening Photo Album</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -47,14 +47,11 @@ $tk = issue_token();
 <body>
   <div class="veil">
     <svg class="rings" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="62" r="19" fill="#c9a86a"/>
-      <circle cx="26" cy="42" r="10" fill="#c9a86a"/>
-      <circle cx="41" cy="29" r="11" fill="#c9a86a"/>
-      <circle cx="59" cy="29" r="11" fill="#c9a86a"/>
-      <circle cx="74" cy="42" r="10" fill="#c9a86a"/>
+      <circle cx="38" cy="54" r="26" fill="none" stroke="#c9a86a" stroke-width="7"/>
+      <circle cx="62" cy="46" r="26" fill="none" stroke="#a8894e" stroke-width="7"/>
     </svg>
-    <div class="names">Animal Rescue Story</div>
-    <div class="date">Rescued &middot; Awarded &middot; On the News</div>
+    <div class="names">Aria &amp; James</div>
+    <div class="date">October 20, 2020 &middot; Toronto</div>
     <div class="status">Opening the album&hellip;</div>
     <div class="spinner"></div>
   </div>
