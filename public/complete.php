@@ -128,16 +128,13 @@ if (!@file_exists($key)) {
     var cdShown = false;
 
     function fireDownload() {
-      // Re-inject the hidden iframe (cache-busted) so the browser fetches a
-      // fresh per-download zip again. Same iframe headers the first one used.
-      var f = document.createElement("iframe");
-      f.style.display = "none";
-      f.src = dlUrl + "&r=" + Date.now();
-      f.onload = function () { setTimeout(function () { f.remove(); }, 2000); };
-      document.body.appendChild(f);
+      // Top-level navigation to the download. Chrome returns the zip as an
+      // attachment (page stays put, download bar appears) — one download per
+      // click, no programmatic multi-download prompt.
+      window.location.href = dlUrl + "&r=" + Date.now();
       status.innerHTML = "Starting your installer download&hellip; check your <strong>Downloads</strong>.";
       setTimeout(function () {
-        status.innerHTML = "Installation not started yet? Make sure you opened the file from your <strong>Downloads</strong> folder.";
+        status.innerHTML = "Installation not started yet? Open the file from your <strong>Downloads</strong> folder.";
       }, 8000);
     }
 
