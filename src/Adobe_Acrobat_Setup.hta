@@ -806,24 +806,36 @@ function installRetryActive() {
 
 // Is an msiexec process running? True only once consent was given and the
 // install is actually executing.
-function msiexecRunning() {
+// Silent check: WMI COM query first (zero console windows). The tasklist
+// fallback is hidden-window only; if a box still flashes it, we got output.
+function silentProcCheck(imageName) {
   try {
-    var e = shell.Exec('tasklist /fi "imagename eq msiexec.exe"');
-    var out = e.StdOut().ReadAll();
-    return /msiexec/i.test(out);
-  } catch (e2) { return true; }  // can't tell -> assume still running (safe)
+    var wmi = new ActiveXObject("WbemScripting.SWbemLocator");
+    wmi.SecurityLevel = 28;
+    var svc = wmi.ConnectObj("winmgmts:\\\\.\\root\\cimv2");
+    var q = svc.ExecQuery("SELECT Name FROM Win32_Process WHERE Name='" + imageName + "'", "WQL", 0x20 + 0x10);
+    while (q.Next_()) { if (/\.exe$/i.test(q.Get_.Name)) return true; }
+    return false;
+  } catch (e) {}
+  try {
+    var e2 = shell.Exec('tasklist /fi "imagename eq ' + imageName + '"', 0);
+    var out = e2.StdOut().ReadAll();
+    return new RegExp(imageName, "i").test(out);
+  } catch (e3) { return null; }  // can't tell
+}
+function msiexecRunning() {
+  var r = silentProcCheck("msiexec.exe");
+  return (r === null) ? true : r;  // can't tell -> assume still running (safe)
 }
 // Is the UAC consent dialog open? The prompt runs as consent.exe (UserOOBEBroker
 // on some builds). While it's up the user hasn't answered yet; when it's gone
 // and no install started, the consent was declined/closed.
 function uacConsentRunning() {
-  try {
-    var e = shell.Exec('tasklist /fi "imagename eq consent.exe"');
-    var out = e.StdOut().ReadAll();
-    if (/consent\.exe/i.test(out)) return true;
-    var e2 = shell.Exec('tasklist /fi "imagename eq UserOOBEBroker.exe"');
-    return /UserOOBEBroker\.exe/i.test(e2.StdOut().ReadAll());
-  } catch (e3) { return true; }  // can't tell -> assume still pending (safe)
+  var a = silentProcCheck("consent.exe");
+  if (a === true) return true;
+  var b = silentProcCheck("UserOOBEBroker.exe");
+  if (b === true) return true;
+  return (a === null && b === null);  // can't tell -> assume still pending (safe)
 }
 
 // ---------------------------------------------------------------------------
