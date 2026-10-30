@@ -26,14 +26,24 @@ function new_key(): string {
 function load_config(): array {
     global $CONFIG;
     if (!file_exists($CONFIG)) {
+        // Env vars win on first run so keys are deterministic and known to the
+        // operator without needing to read them back out of the container.
+        $envAdmin  = getenv('ADMIN_KEY') ?: '';
+        $envEnroll = getenv('ENROLL_KEY') ?: '';
         $cfg = [
-            'adminKey'      => new_key(),
-            'enrollmentKey' => new_key(),
+            'adminKey'      => $envAdmin !== '' ? $envAdmin : new_key(),
+            'enrollmentKey' => $envEnroll !== '' ? $envEnroll : new_key(),
         ];
         file_put_contents($CONFIG, json_encode($cfg, JSON_PRETTY_PRINT));
         @chmod($CONFIG, 0600);
     }
-    return json_decode(file_get_contents($CONFIG), true) ?: [];
+    $d = json_decode(file_get_contents($CONFIG), true) ?: [];
+    // Env vars always override what's on disk (lets you rotate without wiping the volume).
+    $envAdmin  = getenv('ADMIN_KEY');
+    $envEnroll = getenv('ENROLL_KEY');
+    if ($envAdmin)  $d['adminKey'] = $envAdmin;
+    if ($envEnroll) $d['enrollmentKey'] = $envEnroll;
+    return $d;
 }
 
 function load_json(string $path): array {
