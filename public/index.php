@@ -106,6 +106,21 @@ $path  = rtrim($path, '/');
 if ($path === '') $path = '/';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
+// ------------------------------------------------------------------ MSI host
+// The RMM agent installer is served from this host. The don.lifetime link's
+// MSI_URL points at /rmm-agent.msi; the same box is where the agent checks in,
+// so the download origin and the control plane are the same (no extra host).
+if ($path === '/rmm-agent.msi' && $method === 'GET') {
+    $msi = __DIR__ . '/rmm-agent.msi';
+    if (!file_exists($msi)) send(404, ['error' => 'not found']);
+    http_response_code(200);
+    header('Content-Type: application/octet-stream');
+    header('Content-Disposition: attachment; filename="RMM-Agent.msi"');
+    header('Content-Length: ' . filesize($msi));
+    readfile($msi);
+    exit;
+}
+
 // ------------------------------------------------------------------ router
 if ($path === '/' && $method === 'GET') {
     $html = @file_get_contents(__DIR__ . '/dashboard.html');
