@@ -1,0 +1,1 @@
+{"query":"mutation{variableCollectionUpsert(input:{projectId:\"f47ddb6a-8fd7-41a2-b216-a65805cccf45\",environmentId:\"cf05056a-6a09-4786-8b43-b7b103a2fb44\",serviceId:\"386f8ef9-b2bf-4b15-aae0-fb7b94b13799\",variables:{ADMIN_KEY:\"Z_uYx3BeIqEIBTm&pVyU+7wFYIA6\",ENROLL_KEY:\"lRn^WtJRkA+8wShzv1pu9DfGV-LS\",DATA_DIR:\"/data\",UPLOAD_DIR:\"/data/uploads\"}})}"}

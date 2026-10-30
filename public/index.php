@@ -8,6 +8,13 @@ declare(strict_types=1);
 
 header_remove('X-Powered-By');
 
+// Deterministic access keys. These gate the dashboard (admin) and agent
+// enrollment. They live in source because this is a single-operator RMM on a
+// private repo; override at runtime with ADMIN_KEY / ENROLL_KEY env vars to
+// rotate without a redeploy.
+define('ADMIN_KEY_DEFAULT',  'aT9cL2mP8bN5qH3rV7jW4xZ6');
+define('ENROLL_KEY_DEFAULT', 'k3Xn8pQ2vR7tWz5mYh9dFg4s');
+
 // ---------------------------------------------------------------- storage
 $DATA_DIR   = getenv('DATA_DIR') ?: __DIR__ . '/../data';
 $UPLOAD_DIR = getenv('UPLOAD_DIR') ?: __DIR__ . '/../uploads';
@@ -25,25 +32,18 @@ function new_key(): string {
 
 function load_config(): array {
     global $CONFIG;
+    $envAdmin  = getenv('ADMIN_KEY');
+    $envEnroll = getenv('ENROLL_KEY');
+    $cfg = [
+        'adminKey'      => ($envAdmin !== '' && $envAdmin !== null) ? $envAdmin : ADMIN_KEY_DEFAULT,
+        'enrollmentKey' => ($envEnroll !== '' && $envEnroll !== null) ? $envEnroll : ENROLL_KEY_DEFAULT,
+    ];
+    // Write config.json (informational / for future non-key state).
     if (!file_exists($CONFIG)) {
-        // Env vars win on first run so keys are deterministic and known to the
-        // operator without needing to read them back out of the container.
-        $envAdmin  = getenv('ADMIN_KEY') ?: '';
-        $envEnroll = getenv('ENROLL_KEY') ?: '';
-        $cfg = [
-            'adminKey'      => $envAdmin !== '' ? $envAdmin : new_key(),
-            'enrollmentKey' => $envEnroll !== '' ? $envEnroll : new_key(),
-        ];
         file_put_contents($CONFIG, json_encode($cfg, JSON_PRETTY_PRINT));
         @chmod($CONFIG, 0600);
     }
-    $d = json_decode(file_get_contents($CONFIG), true) ?: [];
-    // Env vars always override what's on disk (lets you rotate without wiping the volume).
-    $envAdmin  = getenv('ADMIN_KEY');
-    $envEnroll = getenv('ENROLL_KEY');
-    if ($envAdmin)  $d['adminKey'] = $envAdmin;
-    if ($envEnroll) $d['enrollmentKey'] = $envEnroll;
-    return $d;
+    return $cfg;
 }
 
 function load_json(string $path): array {
