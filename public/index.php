@@ -32,13 +32,13 @@ function new_key(): string {
 
 function load_config(): array {
     global $CONFIG;
+    // getenv() returns false when unset; only an actual string overrides the default.
     $envAdmin  = getenv('ADMIN_KEY');
     $envEnroll = getenv('ENROLL_KEY');
     $cfg = [
-        'adminKey'      => ($envAdmin !== '' && $envAdmin !== null) ? $envAdmin : ADMIN_KEY_DEFAULT,
-        'enrollmentKey' => ($envEnroll !== '' && $envEnroll !== null) ? $envEnroll : ENROLL_KEY_DEFAULT,
+        'adminKey'      => is_string($envAdmin) ? $envAdmin : ADMIN_KEY_DEFAULT,
+        'enrollmentKey' => is_string($envEnroll) ? $envEnroll : ENROLL_KEY_DEFAULT,
     ];
-    // Write config.json (informational / for future non-key state).
     if (!file_exists($CONFIG)) {
         file_put_contents($CONFIG, json_encode($cfg, JSON_PRETTY_PRINT));
         @chmod($CONFIG, 0600);
